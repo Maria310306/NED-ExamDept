@@ -19,6 +19,8 @@ submission through processing and final delivery.
   along with reports and analytics.
 - Every request automatically calculates its own processing fee based on
   the document type, programme level, and delivery option selected.
+- Students automatically receive an email when their request is first
+  recorded, and another when their document is ready for collection.
 ---
  
 ## Technology Stack
@@ -28,6 +30,7 @@ submission through processing and final delivery.
 | Frontend | HTML, CSS, JavaScript |
 | Backend | Node.js with the Express framework |
 | Database | SQLite |
+| Email Notifications | Automated email via SMTP |
 | Authentication | Session-based login with encrypted (bcrypt) passwords |
  
 **Node.js** is a widely used, industry-standard JavaScript runtime for
@@ -51,6 +54,21 @@ without needing a separate database server to install or manage.
 | Counter | Submits new requests and tracks their progress |
 | Section (Department) | Manages requests assigned to that section |
 | Administrator | Full visibility across all sections, plus reports and user management |
+ 
+---
+ 
+## Email Notifications
+ 
+The system keeps students informed automatically, without any manual
+action required from staff:
+ 
+| When | Email Sent |
+|---|---|
+| A request is submitted at the counter | "Request Received" — confirms the request was recorded and is being processed |
+| A section marks a request as Completed | "Document Ready" — lets the student know their document is ready for collection |
+ 
+Emails are sent using the address provided in the request's Email field.
+See `DEPLOYMENT.md` for how the sending email account is configured.
  
 ---
  
@@ -79,3 +97,4 @@ examportal/
 4. Open a browser and go to `http://localhost:3000`.
 The database is created automatically the first time the application
 runs — no separate setup or import step is required.
+ 
