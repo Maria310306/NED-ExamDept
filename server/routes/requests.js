@@ -4,6 +4,8 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../authGuards');
 const { serializeRequest } = require('../format');
+const { sendMail } = require('../mailer');
+const { receivedEmailTemplate, completedEmailTemplate } = require('../emailTemplates');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -19,7 +21,7 @@ function todaySerialDate() {
   const yy = String(d.getFullYear()).slice(-2);
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
-  return `${yy}${mm}${dd}`;
+  return `${dd}${mm}${yy}`;
 }
 
 function formatReqId(serialDate, num) {
@@ -130,6 +132,11 @@ router.post('/', (req, res, next) => {
   try {
     const id = tx();
     res.json({ success: true, id });
+
+    // Fire-and-forget: don't make the person wait on email delivery,
+    // and never fail the request because of a mail problem.
+    const row = getRequestById.get(id);
+    sendMail(receivedEmailTemplate(row)).catch(() => {});
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -234,6 +241,12 @@ router.post('/', (req, res, next) => {
 
   updateStatusStmt.run(status, req.session.user.username, id);
   res.json({ success: true });
+
+  // Fire-and-forget: notify the student when their document is ready.
+  if (status === 'Completed') {
+    const updated = getRequestById.get(id);
+    sendMail(completedEmailTemplate(updated)).catch(() => {});
+  }
 });
 
 /* ══════════════════════════════════════════
