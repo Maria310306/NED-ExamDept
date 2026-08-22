@@ -1733,6 +1733,31 @@ function debounce(fn, delay = 350) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
 }
+
+/* ══════════════════════════════════════════
+   LIVE FILTER BINDING
+══════════════════════════════════════════ */
+
+function bindLiveFilters() {
+  // Counter Records page
+  document.getElementById('cr-search')?.addEventListener('input', debouncedCounterSearch);
+  ['cr-filter-delivery', 'cr-filter-doc', 'cr-filter-section'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', loadAndRenderCounterRecords);
+  });
+
+  // Department Queue page
+  document.getElementById('dept-search')?.addEventListener('input', debouncedDeptSearch);
+  ['dept-filter-delivery', 'dept-filter-doc'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', loadAndRenderDept);
+  });
+
+  // Admin All Requests page
+  document.getElementById('admin-search')?.addEventListener('input', debouncedAdminSearch);
+  ['admin-filter-doc', 'admin-filter-dept', 'admin-filter-delivery'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', loadAndRenderAdminTable);
+  });
+}
+
 const debouncedCounterSearch = debounce(loadAndRenderCounterRecords);
 const debouncedDeptSearch    = debounce(loadAndRenderDept);
 const debouncedAdminSearch   = debounce(loadAndRenderAdminTable);
@@ -1775,7 +1800,6 @@ function clearCalendar(ctx) {
   if (ctx === 'dept')    loadAndRenderDept();
   if (ctx === 'counter') loadAndRenderCounterRecords();
 }
-
 function initCalendar() { injectCalCSS(); injectCalPopup(); injectCalButtons(); }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCalendar);
-else initCalendar();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { initCalendar(); bindLiveFilters(); });
+else { initCalendar(); bindLiveFilters(); }
