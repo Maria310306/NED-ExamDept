@@ -200,9 +200,29 @@ async function doLogin() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display          = 'block';
 
+  resetAllFilters();
   setupNavigation();
   initEntryForm();
   updatePreviewStats();
+}
+
+function resetAllFilters() {
+  const ids = [
+    'cr-search', 'cr-filter-delivery', 'cr-filter-doc', 'cr-filter-section',
+    'dept-search', 'dept-filter-delivery', 'dept-filter-doc',
+    'admin-search', 'admin-filter-doc', 'admin-filter-dept', 'admin-filter-delivery',
+  ];
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+  ['admin', 'dept', 'counter'].forEach(ctx => {
+    document.getElementById(`cal-lbl-${ctx}`)?.replaceChildren(document.createTextNode('Date Filter'));
+    const x = document.getElementById(`cal-x-${ctx}`);       if (x) x.style.display = 'none';
+    document.getElementById(`cal-trig-${ctx}`)?.classList.remove('cal-active');
+  });
+  calState.selectedStart = null;
+  calState.selectedEnd   = null;
+  calState.hoveredDate   = null;
+  calState.context       = null;
 }
 
 async function doLogout() {
@@ -233,6 +253,8 @@ async function doLogout() {
 
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display          = 'block';
+
+    resetAllFilters();
     setupNavigation();
     initEntryForm();
     updatePreviewStats();
@@ -1696,10 +1718,24 @@ function renderMonthGrid() {
 
 function calDayClick(ts) {
   const date = new Date(ts); date.setHours(0,0,0,0);
-  if (!calState.selectedStart || (calState.selectedStart && calState.selectedEnd)) { calState.selectedStart = date; calState.selectedEnd = null; calState.hoveredDate = null; }
-  else { if (date < calState.selectedStart) { calState.selectedEnd = calState.selectedStart; calState.selectedStart = date; } else { calState.selectedEnd = date; } calState.hoveredDate = null; }
+  if (!calState.selectedStart || (calState.selectedStart && calState.selectedEnd)) {
+    calState.selectedStart = date; calState.selectedEnd = null; calState.hoveredDate = null;
+  } else {
+    if (date < calState.selectedStart) { calState.selectedEnd = calState.selectedStart; calState.selectedStart = date; }
+    else { calState.selectedEnd = date; }
+    calState.hoveredDate = null;
+  }
   renderCalBody();
+  if (calState.selectedStart && calState.selectedEnd) applyCalFilter(); // auto-apply, no button needed
 }
+
+function debounce(fn, delay = 350) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+}
+const debouncedCounterSearch = debounce(loadAndRenderCounterRecords);
+const debouncedDeptSearch    = debounce(loadAndRenderDept);
+const debouncedAdminSearch   = debounce(loadAndRenderAdminTable);
 
 function calDayHover(ts) { if (calState.selectedStart && !calState.selectedEnd) { calState.hoveredDate = new Date(ts); calState.hoveredDate.setHours(0,0,0,0); renderCalBody(); } }
 function calDayLeave()   { if (calState.selectedStart && !calState.selectedEnd) { calState.hoveredDate = null; renderCalBody(); } }
