@@ -1,0 +1,20 @@
+{
+  "name": "examportal-backend",
+  "version": "1.0.0",
+  "description": "ExamPortal - University Document Request Management System (Node.js/Express/SQLite backend)",
+  "main": "server/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/server.js",
+    "seed": "node server/seed.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "bcryptjs": "^2.4.3",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "better-sqlite3-session-store": "^0.1.0",
+    "dotenv": "^16.4.5"
+  }
+}
