@@ -200,29 +200,9 @@ async function doLogin() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display          = 'block';
 
-  resetAllFilters();
   setupNavigation();
   initEntryForm();
   updatePreviewStats();
-}
-
-function resetAllFilters() {
-  const ids = [
-    'cr-search', 'cr-filter-delivery', 'cr-filter-doc', 'cr-filter-section',
-    'dept-search', 'dept-filter-delivery', 'dept-filter-doc',
-    'admin-search', 'admin-filter-doc', 'admin-filter-dept', 'admin-filter-delivery',
-  ];
-  ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-
-  ['admin', 'dept', 'counter'].forEach(ctx => {
-    document.getElementById(`cal-lbl-${ctx}`)?.replaceChildren(document.createTextNode('Date Filter'));
-    const x = document.getElementById(`cal-x-${ctx}`);       if (x) x.style.display = 'none';
-    document.getElementById(`cal-trig-${ctx}`)?.classList.remove('cal-active');
-  });
-  calState.selectedStart = null;
-  calState.selectedEnd   = null;
-  calState.hoveredDate   = null;
-  calState.context       = null;
 }
 
 async function doLogout() {
@@ -253,8 +233,6 @@ async function doLogout() {
 
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display          = 'block';
-
-    resetAllFilters();
     setupNavigation();
     initEntryForm();
     updatePreviewStats();
@@ -902,16 +880,28 @@ function updateCounterTabCounts() {
 function renderCounterRecordsTable(rows) {
   const tbody   = document.getElementById('counter-records-body');
   const countEl = document.getElementById('cr-filter-count');
-  const routedTh = document.getElementById('counter-routed-th');
   if (!tbody) return;
 
-  if (routedTh) routedTh.textContent = counterActiveTab === 'in' ? 'Routed From' : 'Routed To';
   countEl.textContent = (rows?.length ?? 0) + ' record' + ((rows?.length ?? 0) !== 1 ? 's' : '');
 
-  if (!rows?.length) { tbody.innerHTML = `<tr><td colspan="13" class="empty-row">No records match your filters</td></tr>`; return; }
+  if (!rows?.length) { tbody.innerHTML = `<tr><td colspan="14" class="empty-row">No records match your filters</td></tr>`; return; }
+
+  // Every request's routing history, regardless of tab: where it last came
+  // from (its previous section, or the original submitting section if it
+  // has never been transferred) and where it currently sits.
+  const routedLabels = (r) => {
+    const routedTo = r.routedTo || '—';
+    let routedFrom = r.dept || '—';
+    if (r.transferLog?.length > 0) {
+      routedFrom = r.transferLog[r.transferLog.length - 1].from || routedFrom;
+    }
+    return { routedFrom, routedTo };
+  };
 
   if (counterActiveTab === 'done') {
-    tbody.innerHTML = rows.map(r => `
+    tbody.innerHTML = rows.map(r => {
+      const { routedFrom, routedTo } = routedLabels(r);
+      return `
     <tr class="${r.status === 'Received' ? 'row-received' : ''}">
       <td><strong class="req-id-cell">${r.id}</strong></td>
       <td><div style="font-weight:600">${r.name}</div><div style="font-size:0.74rem;color:var(--muted)">${r.email}</div></td>
@@ -922,7 +912,8 @@ function renderCounterRecordsTable(rows) {
       <td>${docCopiesDisplay(r)}</td>
       <td><span class="badge badge-${r.delivery === 'Urgent' ? 'urgent' : 'normal'}">${r.delivery}</span></td>
       <td><strong>Rs. ${(r.fee||0).toLocaleString()}</strong></td>
-      <td style="color:var(--teal);font-size:0.81rem;font-weight:600">${r.routedTo||'—'}</td>
+      <td style="color:var(--mid);font-size:0.81rem;font-weight:600">${routedFrom}</td>
+      <td style="color:var(--teal);font-size:0.81rem;font-weight:600">${routedTo}</td>
       <td style="font-size:0.78rem;color:var(--muted)">${r.datetime||'—'}</td>
       <td><span class="badge ${r.status==='Received'?'badge-received':'badge-approved'}">${r.status}</span></td>
       <td>
@@ -931,16 +922,13 @@ function renderCounterRecordsTable(rows) {
           <button class="btn-sm-view" onclick="openModal('${r.id}')">View</button>
         </div>
       </td>
-    </tr>`).join('');
+    </tr>`;
+    }).join('');
     return;
   }
 
   tbody.innerHTML = rows.map(r => {
-    let routedFromLabel = r.routedTo || '—';
-    if (counterActiveTab === 'in' && r.transferLog?.length > 0) {
-      const last = r.transferLog[r.transferLog.length - 1];
-      routedFromLabel = last.from || r.routedTo || '—';
-    }
+    const { routedFrom, routedTo } = routedLabels(r);
     return `
     <tr>
       <td><strong class="req-id-cell">${r.id}</strong></td>
@@ -952,7 +940,8 @@ function renderCounterRecordsTable(rows) {
       <td>${docCopiesDisplay(r)}</td>
       <td><span class="badge badge-${r.delivery==='Urgent'?'urgent':'normal'}">${r.delivery}</span></td>
       <td><strong>Rs. ${(r.fee||0).toLocaleString()}</strong></td>
-      <td style="color:var(--teal);font-size:0.81rem;font-weight:600">${routedFromLabel}</td>
+      <td style="color:var(--mid);font-size:0.81rem;font-weight:600">${routedFrom}</td>
+      <td style="color:var(--teal);font-size:0.81rem;font-weight:600">${routedTo}</td>
       <td style="font-size:0.78rem;color:var(--muted)">${r.datetime||'—'}</td>
       <td><span class="badge ${STATUS_BADGE[r.status]||'badge-pending'}">${r.status}</span></td>
       <td>
@@ -1718,49 +1707,10 @@ function renderMonthGrid() {
 
 function calDayClick(ts) {
   const date = new Date(ts); date.setHours(0,0,0,0);
-  if (!calState.selectedStart || (calState.selectedStart && calState.selectedEnd)) {
-    calState.selectedStart = date; calState.selectedEnd = null; calState.hoveredDate = null;
-  } else {
-    if (date < calState.selectedStart) { calState.selectedEnd = calState.selectedStart; calState.selectedStart = date; }
-    else { calState.selectedEnd = date; }
-    calState.hoveredDate = null;
-  }
+  if (!calState.selectedStart || (calState.selectedStart && calState.selectedEnd)) { calState.selectedStart = date; calState.selectedEnd = null; calState.hoveredDate = null; }
+  else { if (date < calState.selectedStart) { calState.selectedEnd = calState.selectedStart; calState.selectedStart = date; } else { calState.selectedEnd = date; } calState.hoveredDate = null; }
   renderCalBody();
-  if (calState.selectedStart && calState.selectedEnd) applyCalFilter(); // auto-apply, no button needed
 }
-
-function debounce(fn, delay = 350) {
-  let t;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
-}
-
-/* ══════════════════════════════════════════
-   LIVE FILTER BINDING
-══════════════════════════════════════════ */
-
-function bindLiveFilters() {
-  // Counter Records page
-  document.getElementById('cr-search')?.addEventListener('input', debouncedCounterSearch);
-  ['cr-filter-delivery', 'cr-filter-doc', 'cr-filter-section'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', loadAndRenderCounterRecords);
-  });
-
-  // Department Queue page
-  document.getElementById('dept-search')?.addEventListener('input', debouncedDeptSearch);
-  ['dept-filter-delivery', 'dept-filter-doc'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', loadAndRenderDept);
-  });
-
-  // Admin All Requests page
-  document.getElementById('admin-search')?.addEventListener('input', debouncedAdminSearch);
-  ['admin-filter-doc', 'admin-filter-dept', 'admin-filter-delivery'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', loadAndRenderAdminTable);
-  });
-}
-
-const debouncedCounterSearch = debounce(loadAndRenderCounterRecords);
-const debouncedDeptSearch    = debounce(loadAndRenderDept);
-const debouncedAdminSearch   = debounce(loadAndRenderAdminTable);
 
 function calDayHover(ts) { if (calState.selectedStart && !calState.selectedEnd) { calState.hoveredDate = new Date(ts); calState.hoveredDate.setHours(0,0,0,0); renderCalBody(); } }
 function calDayLeave()   { if (calState.selectedStart && !calState.selectedEnd) { calState.hoveredDate = null; renderCalBody(); } }
@@ -1800,6 +1750,7 @@ function clearCalendar(ctx) {
   if (ctx === 'dept')    loadAndRenderDept();
   if (ctx === 'counter') loadAndRenderCounterRecords();
 }
+
 function initCalendar() { injectCalCSS(); injectCalPopup(); injectCalButtons(); }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { initCalendar(); bindLiveFilters(); });
-else { initCalendar(); bindLiveFilters(); }
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCalendar);
+else initCalendar();

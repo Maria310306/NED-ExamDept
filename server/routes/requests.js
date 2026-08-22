@@ -19,7 +19,7 @@ function todaySerialDate() {
   const yy = String(d.getFullYear()).slice(-2);
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
-   return `${dd}${mm}${yy}`;
+  return `${yy}${mm}${dd}`;
 }
 
 function formatReqId(serialDate, num) {
@@ -186,7 +186,7 @@ router.get('/', (req, res, next) => {
   if (q.delivery) { where.push('delivery = @delivery'); params.delivery = q.delivery; }
   if (q.doc_key) { where.push('doc_key = @doc_key'); params.doc_key = q.doc_key; }
   if (q.dept && user.role !== 'department') { where.push('routed_to = @dept'); params.dept = q.dept; }
-  if (q.section) { where.push('dept = @section'); params.section = q.section; }
+  if (q.section) { where.push('routed_to = @section'); params.section = q.section; }
   if (q.date_from) { where.push('date(submitted_at) >= date(@date_from)'); params.date_from = q.date_from; }
   if (q.date_to) { where.push('date(submitted_at) <= date(@date_to)'); params.date_to = q.date_to; }
 
@@ -362,7 +362,7 @@ router.get('/', (req, res, next) => {
   if (q.delivery) { where.push('delivery = @delivery'); params.delivery = q.delivery; }
   if (q.doc_key) { where.push('doc_key = @doc_key'); params.doc_key = q.doc_key; }
   if (q.dept && user.role !== 'department') { where.push('routed_to = @dept'); params.dept = q.dept; }
-  if (q.section) { where.push('dept = @section'); params.section = q.section; }
+  if (q.section) { where.push('routed_to = @section'); params.section = q.section; }
   if (q.date_from) { where.push('date(submitted_at) >= date(@date_from)'); params.date_from = q.date_from; }
   if (q.date_to) { where.push('date(submitted_at) <= date(@date_to)'); params.date_to = q.date_to; }
 
