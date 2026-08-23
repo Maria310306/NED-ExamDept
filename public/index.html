@@ -559,18 +559,18 @@
                 d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
             </svg>
             <input type="text" id="cr-search" placeholder="Search name, ID, roll, CNIC, discipline…"
-              oninput="renderCounterRecordsTable()" />
+              oninput="debouncedCounterSearch()" />
           </div>
 
           <div class="select-wrap sm">
-            <select class="field-select" id="cr-filter-delivery" onchange="renderCounterRecordsTable()">
+            <select class="field-select" id="cr-filter-delivery" onchange="loadAndRenderCounterRecords()">
               <option value="">All Delivery</option>
               <option value="Normal">Normal</option>
               <option value="Urgent">Urgent</option>
             </select>
           </div>
           <div class="select-wrap sm">
-            <select class="field-select" id="cr-filter-doc" onchange="renderCounterRecordsTable()">
+            <select class="field-select" id="cr-filter-doc" onchange="loadAndRenderCounterRecords()">
               <option value="">All Documents</option>
               <option value="degree">1. Issuance of Degree</option>
               <option value="dupdegree">2. Issuance of Duplicate Degree</option>
@@ -660,16 +660,16 @@
                 d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
             </svg>
             <input type="text" id="dept-search" placeholder="Search name, ID, roll…"
-              oninput="deptActiveTab==='out' ? renderDeptOutTable() : renderDeptTable()" />
+              oninput="debouncedDeptSearch()" />
           </div>
           <div class="select-wrap sm"><select class="field-select" id="dept-filter-delivery"
-              onchange="deptActiveTab==='out' ? renderDeptOutTable() : renderDeptTable()">
+              onchange="loadAndRenderDept()">
               <option value="">All Delivery</option>
               <option value="normal">Normal</option>
               <option value="urgent">Urgent</option>
             </select></div>
           <div class="select-wrap sm"><select class="field-select" id="dept-filter-doc"
-              onchange="deptActiveTab==='out' ? renderDeptOutTable() : renderDeptTable()">
+              onchange="loadAndRenderDept()">
               <option value="">All Documents</option>
               <option value="degree">1. Issuance of Degree</option>
               <option value="dupdegree">2. Issuance of Duplicate Degree</option>
@@ -785,9 +785,9 @@
                 d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
             </svg>
             <input type="text" id="admin-search" placeholder="Search name, ID, roll, CNIC, discipline…"
-              oninput="renderAdminTable()" />
+              oninput="debouncedAdminSearch()" />
           </div>
-          <div class="select-wrap sm"><select class="field-select" id="admin-filter-doc" onchange="renderAdminTable()">
+          <div class="select-wrap sm"><select class="field-select" id="admin-filter-doc" onchange="loadAndRenderAdminTable()">
               <option value="">All Documents</option>
               <option value="degree">1. Issuance of Degree</option>
               <option value="dupdegree">2. Issuance of Duplicate Degree</option>
@@ -801,7 +801,7 @@
               <option value="emailcorr">10. Email Correspondence for sending verified documents to Foreign
                 Universities/Foreign Agencies</option>
             </select></div>
-          <div class="select-wrap sm"><select class="field-select" id="admin-filter-dept" onchange="renderAdminTable()">
+          <div class="select-wrap sm"><select class="field-select" id="admin-filter-dept" onchange="loadAndRenderAdminTable()">
               <option value="">Section</option>
               <option>Result Section</option>
               <option>Masters Section</option>
@@ -809,7 +809,7 @@
               <option>External Section</option>
             </select></div>
           <div class="select-wrap sm"><select class="field-select" id="admin-filter-delivery"
-              onchange="renderAdminTable()">
+              onchange="loadAndRenderAdminTable()">
               <option value="">All Delivery</option>
               <option>Normal</option>
               <option>Urgent</option>

@@ -44,6 +44,18 @@ if (!data.success && res.status === 401 && state.user) {
 };
 
 /* ══════════════════════════════════════════
+   DEBOUNCE HELPER (for live search inputs)
+══════════════════════════════════════════ */
+
+function debounce(fn, wait = 350) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
+
+/* ══════════════════════════════════════════
    CONSTANTS & DATA MAPS
 ══════════════════════════════════════════ */
 
@@ -840,6 +852,10 @@ async function loadAndRenderCounterRecords() {
   renderCounterRecordsTable(res.requests);
 }
 
+// Debounced wrapper for the live search box — waits until the person
+// pauses typing before hitting the server, instead of firing on every key.
+const debouncedCounterSearch = debounce(loadAndRenderCounterRecords, 350);
+
 function buildCounterQueryParams() {
   return {
     tab:      counterActiveTab,
@@ -1008,6 +1024,9 @@ async function loadAndRenderDept() {
   updateDeptTabCounts();
   renderDeptTable(res.requests);
 }
+
+// Debounced wrapper for the department queue's live search box.
+const debouncedDeptSearch = debounce(loadAndRenderDept, 350);
 
 function renderDeptStats() {
   API.get('requests.php?action=stats', {}).then(r => {
@@ -1256,6 +1275,9 @@ async function loadAndRenderAdminTable() {
   state.requests = res.requests;
   renderAdminTable(res.requests, res.total);
 }
+
+// Debounced wrapper for the admin table's live search box.
+const debouncedAdminSearch = debounce(loadAndRenderAdminTable, 350);
 
 function renderAdminTable(rows, total) {
   const tbody   = document.getElementById('admin-tbody');
