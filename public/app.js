@@ -880,8 +880,10 @@ function renderCounterStats(res) {
 }
 
 function updateCounterTabCounts() {
-  // We need counts for each tab independently — do 3 quick parallel calls
-  const base = { search:'', delivery:'', doc_key:'', section:'' };
+  // Use current filter params so tab badges reflect filtered counts
+  const cur = buildCounterQueryParams();
+  const base = { search: cur.search, delivery: cur.delivery, doc_key: cur.doc_key, section: cur.section,
+    date_from: cur.date_from || '', date_to: cur.date_to || '' };
   Promise.all([
     API.get('requests.php?action=list', {...base, tab:'in',   limit:1}),
     API.get('requests.php?action=list', {...base, tab:'out',  limit:1}),
@@ -1042,10 +1044,17 @@ function renderDeptStats() {
 }
 
 function updateDeptTabCounts() {
+  // Use current filter params so tab badges reflect filtered counts
+  const base = {
+    search:   document.getElementById('dept-search')?.value || '',
+    delivery: document.getElementById('dept-filter-delivery')?.value || '',
+    doc_key:  document.getElementById('dept-filter-doc')?.value || '',
+    ...buildCalParams('dept'),
+  };
   Promise.all([
-    API.get('requests.php?action=list', { tab:'in',   limit:1 }),
-    API.get('requests.php?action=list', { tab:'out',  limit:1 }),
-    API.get('requests.php?action=list', { tab:'done', limit:1 }),
+    API.get('requests.php?action=list', { ...base, tab:'in',   limit:1 }),
+    API.get('requests.php?action=list', { ...base, tab:'out',  limit:1 }),
+    API.get('requests.php?action=list', { ...base, tab:'done', limit:1 }),
   ]).then(([inR, outR, doneR]) => {
     document.getElementById('tab-in-count').textContent   = inR.total   ?? 0;
     document.getElementById('tab-out-count').textContent  = outR.total  ?? 0;

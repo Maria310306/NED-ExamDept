@@ -186,9 +186,24 @@ router.get('/', (req, res, next) => {
   // admin: unscoped by tab/holder — sees everything, filtered only by the params below
 
   if (q.search) {
-    where.push(`(student_name LIKE @search OR roll_number LIKE @search OR id LIKE @search
-      OR email LIKE @search OR phone LIKE @search OR cnic LIKE @search OR discipline LIKE @search)`);
-    params.search = `%${q.search}%`;
+    const tokens = q.search.trim().split(/\s+/).filter(Boolean);
+    tokens.forEach((tok, i) => {
+      const p = `search${i}`;
+      const stripped = tok.replace(/[-\/]/g, '');
+      const pStrip = `search${i}s`;
+      where.push(`(
+        student_name LIKE @${p} OR roll_number LIKE @${p} OR id LIKE @${p}
+        OR email LIKE @${p} OR phone LIKE @${p} OR cnic LIKE @${p}
+        OR discipline LIKE @${p} OR doc_label LIKE @${p} OR doc_key LIKE @${p}
+        OR dept LIKE @${p} OR routed_to LIKE @${p} OR current_holder LIKE @${p}
+        OR operator LIKE @${p} OR status LIKE @${p}
+        OR REPLACE(REPLACE(cnic, '-', ''), ' ', '') LIKE @${pStrip}
+        OR REPLACE(phone, '-', '') LIKE @${pStrip}
+        OR REPLACE(roll_number, '/', '') LIKE @${pStrip}
+      )`);
+      params[p] = `%${tok}%`;
+      params[pStrip] = `%${stripped}%`;
+    });
   }
   if (q.delivery) { where.push('delivery = @delivery'); params.delivery = q.delivery; }
   if (q.doc_key) { where.push('doc_key = @doc_key'); params.doc_key = q.doc_key; }
@@ -368,9 +383,24 @@ router.get('/', (req, res, next) => {
 
   if (user.role === 'department') { where.push('current_holder = @holderDept'); params.holderDept = user.dept; }
   if (q.search) {
-    where.push(`(student_name LIKE @search OR roll_number LIKE @search OR id LIKE @search
-      OR email LIKE @search OR phone LIKE @search OR cnic LIKE @search OR discipline LIKE @search)`);
-    params.search = `%${q.search}%`;
+    const tokens = q.search.trim().split(/\s+/).filter(Boolean);
+    tokens.forEach((tok, i) => {
+      const p = `search${i}`;
+      const stripped = tok.replace(/[-\/]/g, '');
+      const pStrip = `search${i}s`;
+      where.push(`(
+        student_name LIKE @${p} OR roll_number LIKE @${p} OR id LIKE @${p}
+        OR email LIKE @${p} OR phone LIKE @${p} OR cnic LIKE @${p}
+        OR discipline LIKE @${p} OR doc_label LIKE @${p} OR doc_key LIKE @${p}
+        OR dept LIKE @${p} OR routed_to LIKE @${p} OR current_holder LIKE @${p}
+        OR operator LIKE @${p} OR status LIKE @${p}
+        OR REPLACE(REPLACE(cnic, '-', ''), ' ', '') LIKE @${pStrip}
+        OR REPLACE(phone, '-', '') LIKE @${pStrip}
+        OR REPLACE(roll_number, '/', '') LIKE @${pStrip}
+      )`);
+      params[p] = `%${tok}%`;
+      params[pStrip] = `%${stripped}%`;
+    });
   }
   if (q.delivery) { where.push('delivery = @delivery'); params.delivery = q.delivery; }
   if (q.doc_key) { where.push('doc_key = @doc_key'); params.doc_key = q.doc_key; }
