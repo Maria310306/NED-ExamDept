@@ -176,7 +176,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     if (document.getElementById('login-screen').style.display !== 'none') { doLogin(); return; }
   }
-  if (e.key === 'Escape') { acClose(); closeModal(); }
+  if (e.key === 'Escape') { acClose(); closeModal(); closeConfirmModal(); }
 });
 
 async function doLogin() {
@@ -1310,14 +1310,44 @@ function renderAdminTable(rows, total) {
 }
 
 async function deleteRequest(id) {
-  if (!confirm(`Delete ${id}? This cannot be undone.`)) return;
-  const res = await API.del(`requests.php?action=delete&id=${encodeURIComponent(id)}`, {});
-  if (!res.success) { showToast(res.error || 'Delete failed', 'error'); return; }
-  showToast(`Request ${id} deleted`);
-  loadAndRenderAdminTable();
-  loadAdminDash();
-  updatePreviewStats();
+  openConfirmModal({
+    title: `Delete ${id}?`,
+    message: 'This will permanently remove the request, its transfer history, and any linked documents. This cannot be undone.',
+    okLabel: 'Delete',
+    onConfirm: async () => {
+      const res = await API.del(`requests.php?action=delete&id=${encodeURIComponent(id)}`, {});
+      if (!res.success) { showToast(res.error || 'Delete failed', 'error'); return; }
+      showToast(`Request ${id} deleted`);
+      loadAndRenderAdminTable();
+      loadAdminDash();
+      updatePreviewStats();
+    },
+  });
 }
+
+/* ── Generic confirm dialog (theme-matched replacement for window.confirm) ── */
+let _confirmOkHandler = null;
+
+function openConfirmModal({ title, message, okLabel = 'Confirm', onConfirm }) {
+  document.getElementById('confirm-modal-title').textContent = title;
+  document.getElementById('confirm-modal-message').textContent = message;
+  const okBtn = document.getElementById('confirm-modal-ok-btn');
+  okBtn.textContent = okLabel;
+  _confirmOkHandler = onConfirm;
+  document.getElementById('confirm-modal-overlay').classList.add('open');
+}
+
+function closeConfirmModal() {
+  document.getElementById('confirm-modal-overlay').classList.remove('open');
+  _confirmOkHandler = null;
+}
+
+document.getElementById('confirm-modal-ok-btn').addEventListener('click', async () => {
+  const handler = _confirmOkHandler;
+  closeConfirmModal();
+  if (handler) await handler();
+});
+document.getElementById('confirm-modal-overlay').addEventListener('click', function(e) { if (e.target === this) closeConfirmModal(); });
 
 async function exportCSV() {
   const params = {
