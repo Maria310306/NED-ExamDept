@@ -36,6 +36,16 @@ db.pragma('foreign_keys = ON');
   }
 })();
 
+(function migrateRequestsTable() {
+  const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='requests'").get();
+  if (tableCheck) {
+    const columns = db.prepare("PRAGMA table_info(requests)").all().map(c => c.name);
+    if (!columns.includes('courier_address')) {
+      db.exec("ALTER TABLE requests ADD COLUMN courier_address TEXT NULL");
+    }
+  }
+})();
+
 // Apply schema (idempotent — CREATE TABLE IF NOT EXISTS & CREATE INDEX IF NOT EXISTS)
 const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schemaSql);
