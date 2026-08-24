@@ -730,7 +730,7 @@ async function submitRequest() {
   mark('f-roll',      !roll);      if (!roll)                                  errors.push('Roll Number');
   mark('f-dept',      !dept);      if (!dept)                                  errors.push('Section');
   mark('f-discipline',!discipline);if (!discipline)                            errors.push('Discipline');
-  mark('f-cnic',      cnic.length < 15); if (cnic.length < 15)                 errors.push('Valid CNIC');
+  mark('f-cnic',      cnic.length > 0 && cnic.length < 15); if (cnic.length > 0 && cnic.length < 15) errors.push('Valid CNIC (or leave blank)');
   mark('f-email',     !email.includes('@')); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Valid Email');
   const localPhone = document.getElementById('f-phone')?.value.replace(/\D/g,'') || '';
   mark('f-phone',     localPhone.length < 7); if (localPhone.length < 7)        errors.push('Valid Phone');
@@ -1513,7 +1513,24 @@ function showToast(msg, type = 'success') {
 }
 
 /* ══════════════════════════════════════════
-   AUTO-REFRESH (30s)
+   RIGHT-CLICK / DEVTOOLS DETERRENT
+   (UX deterrent only — does not and cannot provide
+   real protection against a determined technical user)
+══════════════════════════════════════════ */
+
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+document.addEventListener('keydown', e => {
+  const k = e.key.toUpperCase();
+  const blockCombo =
+    k === 'F12' ||
+    (e.ctrlKey && e.shiftKey && (k === 'I' || k === 'J' || k === 'C')) ||
+    (e.ctrlKey && k === 'U');
+  if (blockCombo) e.preventDefault();
+});
+
+/* ══════════════════════════════════════════
+   AUTO-REFRESH (60s)
 ══════════════════════════════════════════ */
 
 setInterval(() => {
@@ -1522,7 +1539,9 @@ setInterval(() => {
   if (state.currentPage === 'page-counter-records') loadAndRenderCounterRecords();
   if (state.currentPage === 'page-dept')            loadAndRenderDept();
   if (state.currentPage === 'page-admin-dash')      loadAdminDash();
-}, 30000);
+  if (state.currentPage === 'page-admin-requests')  loadAndRenderAdminTable();
+  if (state.currentPage === 'page-admin-reports')   loadAndRenderReports();
+}, 60000);
 
 /* ═══════════════════════════════════════════════════════
    CALENDAR DATE FILTER  (unchanged from v3 — no backend dep)

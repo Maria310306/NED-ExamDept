@@ -74,7 +74,7 @@ router.post('/', (req, res, next) => {
   }
 
   const b = req.body || {};
-  const required = ['name', 'roll', 'dept', 'discipline', 'cnic', 'email', 'phone', 'docKey', 'delivery', 'level'];
+  const required = ['name', 'roll', 'dept', 'discipline', 'email', 'phone', 'docKey', 'delivery', 'level'];
   const missing = required.filter(k => !b[k]);
   if (missing.length) {
     return res.status(400).json({ success: false, error: `Missing required field(s): ${missing.join(', ')}` });
@@ -100,7 +100,7 @@ router.post('/', (req, res, next) => {
       roll_number: String(b.roll).trim(),
       dept: b.dept,
       discipline: String(b.discipline).trim(),
-      cnic: String(b.cnic).trim(),
+      cnic: b.cnic ? String(b.cnic).trim() : '',
       email: String(b.email).trim(),
       phone: String(b.phone).trim(),
       doc_key: b.docKey,
