@@ -12,16 +12,23 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS users (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     username    TEXT NOT NULL UNIQUE,
+    email       TEXT UNIQUE,            -- NIDUET email (@cloud.neduet.edu.pk or @neduet.edu.pk)
     password    TEXT NOT NULL,          -- bcrypt hash
     full_name   TEXT NOT NULL,
     role        TEXT NOT NULL DEFAULT 'data-entry'
                     CHECK (role IN ('data-entry','department','admin')),
     dept        TEXT NULL,              -- only for role=department
     is_active   INTEGER NOT NULL DEFAULT 1,
+    archived_at TEXT NULL,
+    archived_by TEXT NULL,
+    reset_token TEXT NULL,
+    reset_expires TEXT NULL,
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_reset_token ON users(reset_token);
 
 -- ── REQUEST ID SERIAL ──────────────────────────────────
 -- Stores one row per calendar date to generate YYMMDD/NNN ids
@@ -93,3 +100,27 @@ CREATE TABLE IF NOT EXISTS transfer_log (
 CREATE INDEX IF NOT EXISTS idx_tl_req  ON transfer_log(request_id);
 CREATE INDEX IF NOT EXISTS idx_tl_from ON transfer_log(from_dept);
 CREATE INDEX IF NOT EXISTS idx_tl_to   ON transfer_log(to_dept);
+
+-- ── DATABASE BACKUPS LOG ───────────────────────────────
+CREATE TABLE IF NOT EXISTS backups (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename      TEXT NOT NULL,
+    filepath      TEXT NOT NULL,
+    size_bytes    INTEGER NOT NULL DEFAULT 0,
+    status        TEXT NOT NULL CHECK (status IN ('success','failed')),
+    error_message TEXT NULL,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_backups_created ON backups(created_at);
+
+-- ── AUDIT LOGS ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    action       TEXT NOT NULL,
+    performed_by TEXT NOT NULL,
+    target_user  TEXT NULL,
+    details      TEXT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+

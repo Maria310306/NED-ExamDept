@@ -1699,7 +1699,8 @@ tbody tr:hover td {
   justify-content: center;
 }
 
-.modal-overlay.open {
+.modal-overlay.open,
+.modal-overlay.active {
   display: flex;
 }
 
@@ -2437,3 +2438,14 @@ tbody tr.row-received:hover td { background-color: #86dea5 !important; }
 .cc-trigger #cc-flag img { border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,0.1); }
 .cc-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .cc-item-code { color: var(--muted); font-size: 0.78rem; flex-shrink: 0; }
+
+/* Table code tags & badges */
+table code {
+  background: var(--surface, #f3f4f6);
+  color: var(--ink, #1f2937);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.85em;
+  border: 1px solid var(--border, #e5e7eb);
+}

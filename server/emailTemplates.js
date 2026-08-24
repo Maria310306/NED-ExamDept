@@ -101,4 +101,44 @@ function completedEmailTemplate(request) {
   };
 }
 
-module.exports = { calcExpectedDate, receivedEmailTemplate, completedEmailTemplate };
+/** Sent when a user requests a password reset. */
+function passwordResetEmailTemplate(user, resetUrl) {
+  const rows = [
+    ['User Name', user.full_name || user.username],
+    ['Username', user.username],
+    ['Email', user.email],
+  ];
+  const intro = `A password reset was requested for your ${config.UNIVERSITY_NAME} account. Click the button below or open the reset link to reset your password. This link will expire in 1 hour.`;
+
+  const html = `
+<div style="font-family:Segoe UI,Arial,sans-serif;background:#f4f5f7;padding:32px 16px;">
+  <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;">
+    <div style="background:#0f766e;padding:22px 28px;">
+      <div style="color:#ffffff;font-size:16px;font-weight:700;">${config.UNIVERSITY_NAME}</div>
+      <div style="color:#ccfbf1;font-size:12px;margin-top:2px;">Password Reset Request</div>
+    </div>
+    <div style="padding:28px;">
+      <h2 style="margin:0 0 12px 0;color:#111827;font-size:18px;">Reset Your Password</h2>
+      <p style="margin:0 0 20px 0;color:#374151;font-size:14px;line-height:1.6;">${intro}</p>
+      <div style="text-align:center;margin:24px 0;">
+        <a href="${resetUrl}" style="background:#0f766e;color:#ffffff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">Reset Password</a>
+      </div>
+      <p style="margin:16px 0;color:#6b7280;font-size:12px;word-break:break-all;">Or copy and paste this link into your browser:<br/><a href="${resetUrl}" style="color:#0f766e;">${resetUrl}</a></p>
+      <p style="margin:22px 0 0 0;color:#6b7280;font-size:12.5px;line-height:1.6;">If you did not request a password reset, you can safely ignore this email.</p>
+    </div>
+    <div style="background:#f9fafb;padding:16px 28px;color:#9ca3af;font-size:11.5px;text-align:center;">
+      This is an automated message from the ${config.UNIVERSITY_NAME} portal. Please do not reply.
+    </div>
+  </div>
+</div>`.trim();
+
+  return {
+    to: user.email,
+    subject: `Password Reset Request — ${config.UNIVERSITY_NAME}`,
+    html,
+    text: `${intro}\n\nReset Link: ${resetUrl}`,
+  };
+}
+
+module.exports = { calcExpectedDate, receivedEmailTemplate, completedEmailTemplate, passwordResetEmailTemplate };
+

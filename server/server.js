@@ -13,6 +13,11 @@ require('./seed');
 const authRoutes = require('./routes/auth');
 const requestsRoutes = require('./routes/requests');
 const usersRoutes = require('./routes/users');
+const backupsRoutes = require('./routes/backups');
+const backupService = require('./backupService');
+
+// Initialize daily automated database backup
+backupService.initScheduler();
 
 const app = express();
 app.disable('x-powered-by');
@@ -50,6 +55,7 @@ app.use(session({
 app.use('/api/auth.php', authRoutes);
 app.use('/api/requests.php', requestsRoutes);
 app.use('/api/users.php', usersRoutes);
+app.use('/api/backups.php', backupsRoutes);
 
 // ── Frontend (index.html / styles.css / app.js) ──
 app.use(express.static(path.join(__dirname, '..', 'public')));

@@ -13,7 +13,30 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-// Apply schema (idempotent — CREATE TABLE IF NOT EXISTS)
+// Run migrations for existing databases before executing full schema
+(function migrateUsersTable() {
+  const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+  if (tableCheck) {
+    const columns = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+    if (!columns.includes('email')) {
+      db.exec("ALTER TABLE users ADD COLUMN email TEXT");
+    }
+    if (!columns.includes('archived_at')) {
+      db.exec("ALTER TABLE users ADD COLUMN archived_at TEXT NULL");
+    }
+    if (!columns.includes('archived_by')) {
+      db.exec("ALTER TABLE users ADD COLUMN archived_by TEXT NULL");
+    }
+    if (!columns.includes('reset_token')) {
+      db.exec("ALTER TABLE users ADD COLUMN reset_token TEXT NULL");
+    }
+    if (!columns.includes('reset_expires')) {
+      db.exec("ALTER TABLE users ADD COLUMN reset_expires TEXT NULL");
+    }
+  }
+})();
+
+// Apply schema (idempotent — CREATE TABLE IF NOT EXISTS & CREATE INDEX IF NOT EXISTS)
 const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schemaSql);
 

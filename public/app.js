@@ -265,9 +265,11 @@ function setupNavigation() {
     ],
     'department': [{ label: '📋 Request Queue', page: 'page-dept' }],
     'admin': [
-      { label: '📊 Dashboard',    page: 'page-admin-dash'      },
-      { label: '📋 All Requests', page: 'page-admin-requests'  },
-      { label: '📈 Reports',      page: 'page-admin-reports'   },
+      { label: '📊 Dashboard',       page: 'page-admin-dash'      },
+      { label: '📋 All Requests',    page: 'page-admin-requests'  },
+      { label: '👥 User Management', page: 'page-admin-users'     },
+      { label: '💾 Backups',         page: 'page-admin-backups'   },
+      { label: '📈 Reports',         page: 'page-admin-reports'   },
     ],
   };
   (items[state.role] || []).forEach(item => {
@@ -285,11 +287,13 @@ function showPage(pageId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => {
     b.classList.toggle('active', b.textContent.includes(
-      pageId === 'page-entry'           ? 'New Request'  :
-      pageId === 'page-counter-records' ? 'Records'       :
-      pageId === 'page-dept'            ? 'Request Queue' :
-      pageId === 'page-admin-dash'      ? 'Dashboard'     :
-      pageId === 'page-admin-requests'  ? 'All Requests'  : 'Reports'
+      pageId === 'page-entry'           ? 'New Request'      :
+      pageId === 'page-counter-records' ? 'Records'          :
+      pageId === 'page-dept'            ? 'Request Queue'    :
+      pageId === 'page-admin-dash'      ? 'Dashboard'        :
+      pageId === 'page-admin-requests'  ? 'All Requests'     :
+      pageId === 'page-admin-users'     ? 'User Management'  :
+      pageId === 'page-admin-backups'   ? 'Backups'          : 'Reports'
     ));
   });
   const page = document.getElementById(pageId);
@@ -311,6 +315,8 @@ function showPage(pageId) {
   if (pageId === 'page-admin-dash')     loadAdminDash();
   if (pageId === 'page-admin-requests') loadAndRenderAdminTable();
   if (pageId === 'page-admin-reports')  loadAndRenderReports();
+  if (pageId === 'page-admin-users')    loadUsers();
+  if (pageId === 'page-admin-backups')  loadBackups();
 
   setTimeout(injectCalButtons, 60);
 }
@@ -1834,3 +1840,469 @@ function clearCalendar(ctx) {
 function initCalendar() { injectCalCSS(); injectCalPopup(); injectCalButtons(); }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCalendar);
 else initCalendar();
+
+/* ══════════════════════════════════════════
+   USER MANAGEMENT & ARCHIVING
+══════════════════════════════════════════ */
+
+const userState = {
+  activeTab: 'active', // 'active' or 'archived'
+  users: [],
+};
+
+function switchUserTab(tab) {
+  userState.activeTab = tab;
+  document.getElementById('user-tab-active')?.classList.toggle('active', tab === 'active');
+  document.getElementById('user-tab-archived')?.classList.toggle('active', tab === 'archived');
+  loadUsers();
+}
+
+async function loadUsers() {
+  const res = await API.get('users.php', { action: 'list', status: userState.activeTab });
+  if (!res.success) {
+    showToast(res.error || 'Failed to load users', 'error');
+    return;
+  }
+  userState.users = res.users || [];
+  
+  // Also fetch count for the other tab to populate tab counters
+  const otherStatus = userState.activeTab === 'active' ? 'archived' : 'active';
+  const otherRes = await API.get('users.php', { action: 'list', status: otherStatus });
+  const otherCount = (otherRes.users || []).length;
+  
+  if (userState.activeTab === 'active') {
+    if (document.getElementById('active-user-count')) document.getElementById('active-user-count').textContent = userState.users.length;
+    if (document.getElementById('archived-user-count')) document.getElementById('archived-user-count').textContent = otherCount;
+  } else {
+    if (document.getElementById('archived-user-count')) document.getElementById('archived-user-count').textContent = userState.users.length;
+    if (document.getElementById('active-user-count')) document.getElementById('active-user-count').textContent = otherCount;
+  }
+
+  renderUsersTable();
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderUsersTable() {
+  const query = (document.getElementById('user-search')?.value || '').toLowerCase().trim();
+  const filtered = userState.users.filter(u => 
+    (u.username || '').toLowerCase().includes(query) ||
+    (u.full_name || '').toLowerCase().includes(query) ||
+    (u.email || '').toLowerCase().includes(query) ||
+    (u.role || '').toLowerCase().includes(query) ||
+    (u.dept || '').toLowerCase().includes(query)
+  );
+
+  if (document.getElementById('user-filter-count')) {
+    document.getElementById('user-filter-count').textContent = `${filtered.length} user${filtered.length === 1 ? '' : 's'}`;
+  }
+
+  const headEl = document.getElementById('users-table-head');
+  const bodyEl = document.getElementById('users-tbody');
+  if (!headEl || !bodyEl) return;
+
+  if (userState.activeTab === 'active') {
+    headEl.innerHTML = `
+      <tr>
+        <th>ID</th>
+        <th>Full Name</th>
+        <th>Username</th>
+        <th>NIDUET Email</th>
+        <th>Role</th>
+        <th>Department</th>
+        <th>Actions</th>
+      </tr>
+    `;
+
+    if (filtered.length === 0) {
+      bodyEl.innerHTML = `<tr><td colspan="7" class="empty-row">No active users found</td></tr>`;
+      return;
+    }
+
+    bodyEl.innerHTML = filtered.map(u => `
+      <tr>
+        <td><strong>#${u.id}</strong></td>
+        <td>${escapeHtml(u.full_name)}</td>
+        <td><code>${escapeHtml(u.username)}</code></td>
+        <td>${u.email ? `<a href="mailto:${escapeHtml(u.email)}" style="color:var(--accent,#0f766e);">${escapeHtml(u.email)}</a>` : '—'}</td>
+        <td><span class="badge ${u.role === 'admin' ? 'badge-approved' : u.role === 'department' ? 'badge-received' : 'badge-pending'}">${u.role}</span></td>
+        <td>${escapeHtml(u.dept || '—')}</td>
+        <td>
+          <button class="btn-secondary sm" style="margin-right:4px;" onclick="promptResetUserPassword(${u.id}, '${escapeJs(u.username)}')">🔑 Password</button>
+          <button class="btn-secondary sm" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5;" onclick="promptArchiveUser(${u.id}, '${escapeJs(u.username)}')">🗑️ Delete / Archive</button>
+        </td>
+      </tr>
+    `).join('');
+
+  } else { // Archived Users
+    headEl.innerHTML = `
+      <tr>
+        <th>ID</th>
+        <th>Full Name</th>
+        <th>Username</th>
+        <th>NIDUET Email</th>
+        <th>Role</th>
+        <th>Archived Date</th>
+        <th>Archived By</th>
+        <th>Actions</th>
+      </tr>
+    `;
+
+    if (filtered.length === 0) {
+      bodyEl.innerHTML = `<tr><td colspan="8" class="empty-row">No archived users found</td></tr>`;
+      return;
+    }
+
+    bodyEl.innerHTML = filtered.map(u => `
+      <tr>
+        <td><strong>#${u.id}</strong></td>
+        <td>${escapeHtml(u.full_name)}</td>
+        <td><code>${escapeHtml(u.username)}</code></td>
+        <td>${u.email ? escapeHtml(u.email) : '—'}</td>
+        <td><span class="badge badge-pending">${u.role}</span></td>
+        <td>${u.archived_at ? escapeHtml(u.archived_at) : '—'}</td>
+        <td>${u.archived_by ? `<code>${escapeHtml(u.archived_by)}</code>` : '—'}</td>
+        <td>
+          <button class="btn-primary sm" style="background:#166534;" onclick="promptRestoreUser(${u.id}, '${escapeJs(u.username)}')">♻️ Restore Account</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+}
+
+function escapeJs(str) {
+  return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function openCreateUserModal() {
+  document.getElementById('new-user-fullname').value = '';
+  document.getElementById('new-user-username').value = '';
+  document.getElementById('new-user-email').value = '';
+  document.getElementById('new-user-password').value = '';
+  document.getElementById('new-user-role').value = 'data-entry';
+  document.getElementById('new-user-dept').value = '';
+  toggleNewUserDeptSelect();
+  const modal = document.getElementById('create-user-modal-overlay');
+  modal.classList.add('open');
+  modal.classList.add('active');
+}
+
+function closeCreateUserModal() {
+  const modal = document.getElementById('create-user-modal-overlay');
+  modal.classList.remove('open');
+  modal.classList.remove('active');
+}
+
+function toggleNewUserDeptSelect() {
+  const role = document.getElementById('new-user-role').value;
+  document.getElementById('new-user-dept-wrap').style.display = (role === 'department') ? 'block' : 'none';
+}
+
+async function submitCreateUser(e) {
+  e.preventDefault();
+  const full_name = document.getElementById('new-user-fullname').value.trim();
+  const username  = document.getElementById('new-user-username').value.trim();
+  const email     = document.getElementById('new-user-email').value.trim();
+  const password  = document.getElementById('new-user-password').value.trim();
+  const role      = document.getElementById('new-user-role').value;
+  const dept      = document.getElementById('new-user-dept').value;
+
+  if (!full_name || !username || !email || !password || !role) {
+    showToast('Please fill all required fields', 'error');
+    return;
+  }
+
+  const res = await API.post('users.php?action=create', { full_name, username, email, password, role, dept });
+  if (!res.success) {
+    showToast(res.error || 'Failed to create user', 'error');
+    return;
+  }
+
+  showToast(`User account "${res.user.username}" created successfully`, 'success');
+  closeCreateUserModal();
+  loadUsers();
+}
+
+/* ══════════════════════════════════════════
+   ADMIN PASSWORD CONFIRMATION MODAL
+══════════════════════════════════════════ */
+
+let pendingAdminAction = null;
+
+function openAdminPassModal(title, msg, actionCallback) {
+  document.getElementById('admin-pass-modal-title').textContent = title;
+  document.getElementById('admin-pass-modal-msg').textContent   = msg;
+  document.getElementById('admin-confirm-password').value      = '';
+  pendingAdminAction = actionCallback;
+  const modal = document.getElementById('admin-pass-modal-overlay');
+  modal.classList.add('open');
+  modal.classList.add('active');
+  setTimeout(() => document.getElementById('admin-confirm-password').focus(), 100);
+}
+
+function closeAdminPassModal() {
+  const modal = document.getElementById('admin-pass-modal-overlay');
+  modal.classList.remove('open');
+  modal.classList.remove('active');
+  pendingAdminAction = null;
+}
+
+async function submitAdminPassConfirm(e) {
+  e.preventDefault();
+  const admin_password = document.getElementById('admin-confirm-password').value;
+  if (!admin_password) {
+    showToast('Please enter your password', 'error');
+    return;
+  }
+
+  if (typeof pendingAdminAction === 'function') {
+    const callback = pendingAdminAction;
+    closeAdminPassModal();
+    await callback(admin_password);
+  }
+}
+
+function promptArchiveUser(userId, username) {
+  openAdminPassModal(
+    `Admin Verification: Delete/Archive "${username}"`,
+    `Archiving will disable login access for user account "${username}" while preserving data records. Enter your Admin Password to verify:`,
+    async (admin_password) => {
+      const res = await API.post('users.php?action=archive', { id: userId, admin_password });
+      if (!res.success) {
+        showToast(res.error || 'Failed to archive user. Password incorrect.', 'error');
+        return;
+      }
+      showToast(res.message || `User ${username} archived successfully`, 'success');
+      loadUsers();
+    }
+  );
+}
+
+function promptRestoreUser(userId, username) {
+  openAdminPassModal(
+    `Admin Verification: Restore User "${username}"`,
+    `Restoring will re-enable login access for user account "${username}". Enter your Admin Password to verify:`,
+    async (admin_password) => {
+      const res = await API.post('users.php?action=restore', { id: userId, admin_password });
+      if (!res.success) {
+        showToast(res.error || 'Failed to restore user. Password incorrect.', 'error');
+        return;
+      }
+      showToast(res.message || `User ${username} restored successfully`, 'success');
+      loadUsers();
+    }
+  );
+}
+
+async function promptResetUserPassword(userId, username) {
+  const newPass = prompt(`Enter new password for account "${username}":`);
+  if (!newPass) return;
+  if (newPass.length < 6) {
+    showToast('Password must be at least 6 characters', 'error');
+    return;
+  }
+  const res = await API.post('users.php?action=reset_password', { id: userId, new_password: newPass });
+  if (!res.success) {
+    showToast(res.error || 'Failed to reset password', 'error');
+    return;
+  }
+  showToast(`Password for ${username} updated successfully`, 'success');
+}
+
+/* ══════════════════════════════════════════
+   FORGOT & RESET PASSWORD FLOW
+══════════════════════════════════════════ */
+
+function openForgotPasswordModal(e) {
+  if (e) e.preventDefault();
+  document.getElementById('forgot-email-input').value = '';
+  const modal = document.getElementById('forgot-password-modal-overlay');
+  modal.classList.add('open');
+  modal.classList.add('active');
+  setTimeout(() => document.getElementById('forgot-email-input').focus(), 100);
+}
+
+function closeForgotPasswordModal() {
+  const modal = document.getElementById('forgot-password-modal-overlay');
+  modal.classList.remove('open');
+  modal.classList.remove('active');
+}
+
+function openResetTokenPrompt() {
+  closeForgotPasswordModal();
+  const token = prompt("If you have received a reset token, enter or paste it below:");
+  if (token && token.trim()) {
+    openResetPasswordWithToken(token.trim());
+  }
+}
+
+async function submitForgotPassword(e) {
+  e.preventDefault();
+  const email = document.getElementById('forgot-email-input').value.trim();
+  if (!email) { showToast('Enter registered email or username', 'error'); return; }
+
+  const res = await API.post('auth.php?action=forgot_password', { email });
+  if (!res.success) {
+    showToast(res.error || 'Failed to process request', 'error');
+    return;
+  }
+
+  closeForgotPasswordModal();
+  showToast(res.message || 'Password reset link sent to email', 'success');
+
+  if (res.devToken) {
+    // If SMTP is not configured or in dev environment, offer direct one-click token reset
+    setTimeout(() => {
+      if (confirm(`Password reset token generated: ${res.devToken}\n\nWould you like to reset your password now?`)) {
+        openResetPasswordWithToken(res.devToken);
+      }
+    }, 300);
+  } else {
+    setTimeout(() => {
+      const enterTokenNow = confirm('If you already have your password reset token, click OK to enter it now.');
+      if (enterTokenNow) {
+        openResetTokenPrompt();
+      }
+    }, 400);
+  }
+}
+
+function openResetPasswordWithToken(token) {
+  document.getElementById('reset-password-token').value = token;
+  document.getElementById('reset-new-password').value = '';
+  document.getElementById('reset-confirm-password').value = '';
+  const modal = document.getElementById('reset-password-modal-overlay');
+  modal.classList.add('open');
+  modal.classList.add('active');
+  setTimeout(() => document.getElementById('reset-new-password').focus(), 100);
+}
+
+function closeResetPasswordModal() {
+  const modal = document.getElementById('reset-password-modal-overlay');
+  modal.classList.remove('open');
+  modal.classList.remove('active');
+}
+
+async function submitResetPassword(e) {
+  e.preventDefault();
+  const token = document.getElementById('reset-password-token').value.trim();
+  const new_password = document.getElementById('reset-new-password').value.trim();
+  const confirm_pass = document.getElementById('reset-confirm-password').value.trim();
+
+  if (!token) {
+    showToast('Reset token is missing or invalid', 'error');
+    return;
+  }
+  if (!new_password || new_password.length < 6) {
+    showToast('Password must be at least 6 characters long', 'error');
+    return;
+  }
+  if (new_password !== confirm_pass) {
+    showToast('Passwords do not match', 'error');
+    return;
+  }
+
+  const res = await API.post('auth.php?action=reset_password_with_token', { token, new_password });
+  if (!res.success) {
+    showToast(res.error || 'Failed to reset password', 'error');
+    return;
+  }
+
+  showToast(res.message || 'Password reset successfully! You can now log in.', 'success');
+  closeResetPasswordModal();
+  window.location.hash = '';
+}
+
+/* Check if URL contains reset token parameter on boot */
+(async () => {
+  const hash = window.location.hash || '';
+  if (hash.includes('token=')) {
+    const token = hash.split('token=')[1]?.split('&')[0];
+    if (token) {
+      const res = await API.get('auth.php?action=verify_reset_token', { token });
+      if (res.success) {
+        document.getElementById('reset-password-modal-sub').textContent = `Resetting password for ${res.username} (${res.email})`;
+        openResetPasswordWithToken(token);
+      } else {
+        showToast(res.error || 'Invalid reset token', 'error');
+      }
+    }
+  }
+})();
+
+/* ══════════════════════════════════════════
+   DATABASE BACKUP MANAGEMENT
+══════════════════════════════════════════ */
+
+async function loadBackups() {
+  const res = await API.get('backups.php', { action: 'list' });
+  if (!res.success) {
+    showToast(res.error || 'Failed to load backups', 'error');
+    return;
+  }
+  renderBackupsTable(res.backups || []);
+}
+
+function renderBackupsTable(backups) {
+  const bodyEl = document.getElementById('backups-tbody');
+  if (!bodyEl) return;
+
+  if (backups.length === 0) {
+    bodyEl.innerHTML = `<tr><td colspan="6" class="empty-row">No backups recorded yet</td></tr>`;
+    return;
+  }
+
+  bodyEl.innerHTML = backups.map(b => {
+    const sizeKb = Math.round(b.size_bytes / 1024);
+    const sizeStr = sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(2)} MB` : `${sizeKb} KB`;
+    const isSuccess = b.status === 'success';
+
+    return `
+      <tr>
+        <td><strong>#${b.id}</strong></td>
+        <td><code>${escapeHtml(b.filename)}</code></td>
+        <td>${sizeStr}</td>
+        <td><span class="badge ${isSuccess ? 'badge-approved' : 'badge-pending'}">${b.status}</span></td>
+        <td>${escapeHtml(b.created_at || '—')}</td>
+        <td>
+          ${isSuccess ? `<button class="btn-secondary sm" onclick="promptRestoreBackup(${b.id}, '${escapeJs(b.filename)}')">⚡ Restore</button>` : '—'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function triggerManualBackup() {
+  showToast('Creating database backup...', 'info');
+  const res = await API.post('backups.php?action=trigger', {});
+  if (!res.success) {
+    showToast(res.error || 'Backup failed', 'error');
+    return;
+  }
+  showToast(`Backup "${res.backup.filename}" created successfully`, 'success');
+  loadBackups();
+}
+
+function promptRestoreBackup(backupId, filename) {
+  openAdminPassModal(
+    `Restore Database from Backup?`,
+    `WARNING: Restoring from backup "${filename}" will overwrite active records with data from that backup point. Confirm with Admin Password:`,
+    async (admin_password) => {
+      const res = await API.post('backups.php?action=restore', { backup_id: backupId, admin_password });
+      if (!res.success) {
+        showToast(res.error || 'Failed to restore database', 'error');
+        return;
+      }
+      showToast(`Database restored successfully from ${filename}`, 'success');
+      loadBackups();
+    }
+  );
+}

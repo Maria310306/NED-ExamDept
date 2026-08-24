@@ -56,15 +56,18 @@
           </div>
         </div>
         <div class="field-group">
-          <label class="field-label">Username</label>
-          <input class="field-input" type="text" id="login-user" placeholder="Enter your username" autocomplete="off" />
+          <label class="field-label">Username or NIDUET Email</label>
+          <input class="field-input" type="text" id="login-user" placeholder="username or user@cloud.neduet.edu.pk" autocomplete="off" />
         </div>
         <div class="field-group">
           <label class="field-label">Password</label>
           <input class="field-input" type="password" id="login-pass" placeholder="••••••••" />
+          <div style="text-align:right;margin-top:6px;">
+            <a href="#" onclick="openForgotPasswordModal(event)" style="color:var(--gold,#f5a623);font-size:13px;text-decoration:none;font-weight:500;">Forgot Password?</a>
+          </div>
         </div>
         <button class="btn-login" onclick="doLogin()">Sign In</button>
-        <p class="demo-note">Demo: any username &amp; password</p>
+        <p class="demo-note">Log in with your assigned NIDUET credentials.</p>
       </div>
     </div>
   </div>
@@ -864,7 +867,230 @@
       </div>
     </main>
 
+    <!-- ══ PAGE: ADMIN USER MANAGEMENT ══ -->
+    <main class="page" id="page-admin-users">
+      <div class="page-content">
+        <div class="page-header">
+          <div>
+            <h2 class="page-title">User Management</h2>
+            <p class="page-sub">Create, view, archive, and manage application user accounts</p>
+          </div>
+          <button class="btn-primary sm" onclick="openCreateUserModal()">
+            <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;margin-right:6px;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            Create New User
+          </button>
+        </div>
+
+        <!-- Active / Archived Users Sub-tabs -->
+        <div class="in-out-tabs">
+          <button class="in-out-tab active" id="user-tab-active" onclick="switchUserTab('active')">
+            👥 Active Users <span class="tab-count" id="active-user-count">0</span>
+          </button>
+          <button class="in-out-tab" id="user-tab-archived" onclick="switchUserTab('archived')">
+            📁 Archived Users <span class="tab-count" id="archived-user-count">0</span>
+          </button>
+        </div>
+
+        <div class="filter-bar">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <input type="text" id="user-search" placeholder="Search username, full name, email, role..." oninput="renderUsersTable()" />
+          </div>
+          <div class="filter-count" id="user-filter-count">— users</div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-scroll">
+            <table id="users-table">
+              <thead id="users-table-head">
+                <!-- Dynamically updated via JS for active vs archived -->
+              </thead>
+              <tbody id="users-tbody">
+                <tr><td colspan="7" class="empty-row">Loading users...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ══ PAGE: ADMIN BACKUPS ══ -->
+    <main class="page" id="page-admin-backups">
+      <div class="page-content">
+        <div class="page-header">
+          <div>
+            <h2 class="page-title">Database Backups</h2>
+            <p class="page-sub">Automated daily database backups and point-in-time recovery logs</p>
+          </div>
+          <button class="btn-primary sm" onclick="triggerManualBackup()">
+            <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;margin-right:6px;"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+            Backup Now
+          </button>
+        </div>
+
+        <div class="table-card">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Backup File</th>
+                  <th>Size</th>
+                  <th>Status</th>
+                  <th>Date &amp; Time</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="backups-tbody">
+                <tr><td colspan="6" class="empty-row">Loading backups history...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+
   </div><!-- end #app -->
+
+  <!-- Create New User Modal -->
+  <div class="modal-overlay" id="create-user-modal-overlay">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-header">
+        <div>
+          <div class="modal-req-id">Create New User</div>
+          <div class="modal-student">Add a new user with permitted NIDUET credentials</div>
+        </div>
+        <button class="modal-close" onclick="closeCreateUserModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitCreateUser(event)">
+          <div class="field-group" style="margin-bottom:14px">
+            <label class="field-label">Full Name <span class="req-star">*</span></label>
+            <input class="field-input" id="new-user-fullname" type="text" placeholder="Muhammad Ali" required />
+          </div>
+          <div class="field-group" style="margin-bottom:14px">
+            <label class="field-label">Username <span class="req-star">*</span></label>
+            <input class="field-input" id="new-user-username" type="text" placeholder="e.g. mali22" required />
+          </div>
+          <div class="field-group" style="margin-bottom:14px">
+            <label class="field-label">NIDUET Email <span class="req-star">*</span></label>
+            <input class="field-input" id="new-user-email" type="email" placeholder="mali22@cloud.neduet.edu.pk" required />
+            <div class="field-hint">Must end with @cloud.neduet.edu.pk or @neduet.edu.pk</div>
+          </div>
+          <div class="field-group" style="margin-bottom:14px">
+            <label class="field-label">Password <span class="req-star">*</span></label>
+            <input class="field-input" id="new-user-password" type="password" placeholder="••••••••" required minlength="6" />
+          </div>
+          <div class="field-group" style="margin-bottom:14px">
+            <label class="field-label">Role <span class="req-star">*</span></label>
+            <div class="select-wrap">
+              <select class="field-select" id="new-user-role" onchange="toggleNewUserDeptSelect()" required>
+                <option value="data-entry">Counter (Data Entry)</option>
+                <option value="department">Section (Department)</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-group" id="new-user-dept-wrap" style="display:none; margin-bottom:20px">
+            <label class="field-label">Assigned Section <span class="req-star">*</span></label>
+            <div class="select-wrap">
+              <select class="field-select" id="new-user-dept">
+                <option value="">— Select Section —</option>
+                <option value="Result Section">Result Section</option>
+                <option value="Degree Section">Degree Section</option>
+                <option value="External Section">External Section</option>
+                <option value="Masters Section">Masters Section</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+            <button type="button" class="btn-secondary" onclick="closeCreateUserModal()">Cancel</button>
+            <button type="submit" class="btn-primary">Create Account</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Password Confirmation Modal -->
+  <div class="modal-overlay" id="admin-pass-modal-overlay">
+    <div class="modal-box" style="max-width:400px">
+      <div class="modal-header">
+        <div>
+          <div class="modal-req-id" id="admin-pass-modal-title">Admin Password Confirmation</div>
+          <div class="modal-student" id="admin-pass-modal-msg">Enter your password to verify this operation.</div>
+        </div>
+        <button class="modal-close" onclick="closeAdminPassModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitAdminPassConfirm(event)">
+          <div class="field-group" style="margin-bottom:20px;">
+            <label class="field-label">Admin Password <span class="req-star">*</span></label>
+            <input class="field-input" type="password" id="admin-confirm-password" placeholder="Enter your current password" required />
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button type="button" class="btn-secondary" onclick="closeAdminPassModal()">Cancel</button>
+            <button type="submit" class="btn-primary" id="admin-pass-confirm-btn">Confirm</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forgot Password Modal -->
+  <div class="modal-overlay" id="forgot-password-modal-overlay">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-header">
+        <div>
+          <div class="modal-req-id">Forgot Password</div>
+          <div class="modal-student">Enter your registered NIDUET email address</div>
+        </div>
+        <button class="modal-close" onclick="closeForgotPasswordModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitForgotPassword(event)">
+          <div class="field-group" style="margin-bottom:20px;">
+            <label class="field-label">Registered Email / Username <span class="req-star">*</span></label>
+            <input class="field-input" type="text" id="forgot-email-input" placeholder="user@cloud.neduet.edu.pk" required />
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button type="button" class="btn-secondary" onclick="closeForgotPasswordModal()">Cancel</button>
+            <button type="submit" class="btn-primary">Send Reset Link</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reset Password Modal -->
+  <div class="modal-overlay" id="reset-password-modal-overlay">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-header">
+        <div>
+          <div class="modal-req-id">Reset Password</div>
+          <div class="modal-student" id="reset-password-modal-sub">Set a new password for your account</div>
+        </div>
+        <button class="modal-close" onclick="closeResetPasswordModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitResetPassword(event)">
+          <input type="hidden" id="reset-password-token" />
+          <div class="field-group" style="margin-bottom:14px;">
+            <label class="field-label">New Password <span class="req-star">*</span></label>
+            <input class="field-input" type="password" id="reset-new-password" placeholder="••••••••" required minlength="6" />
+          </div>
+          <div class="field-group" style="margin-bottom:20px;">
+            <label class="field-label">Confirm New Password <span class="req-star">*</span></label>
+            <input class="field-input" type="password" id="reset-confirm-password" placeholder="••••••••" required minlength="6" />
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button type="button" class="btn-secondary" onclick="closeResetPasswordModal()">Cancel</button>
+            <button type="submit" class="btn-primary">Reset Password</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <!-- Transfer Modal -->
   <div class="modal-overlay" id="transfer-modal-overlay">
