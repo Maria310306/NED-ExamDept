@@ -10,9 +10,8 @@ router.use(requireRole('admin'));
 
 const VALID_ROLES = ['data-entry', 'department', 'admin'];
 
-function isValidNiduetEmail(email) {
+function isValidNeduetEmail(email) {
   if (!email || typeof email !== 'string') return false;
-  // Validates @cloud.neduet.edu.pk only
   return /^[a-zA-Z0-9._%+-]+@cloud\.neduet\.edu\.pk$/i.test(email.trim());
 }
 
@@ -50,7 +49,7 @@ router.get('/', (req, res, next) => {
 });
 
 // POST ?action=create  { username, email, password, full_name, role, dept }
-router.post('/', (req, res, next) => {
+router.post('/', async (req, res, next) => {
   if (req.query.action !== 'create') return next();
   const { username, email, password, full_name, role, dept } = req.body || {};
 
@@ -58,7 +57,7 @@ router.post('/', (req, res, next) => {
     return res.status(400).json({ success: false, error: 'username, email, password, full_name, and role are required' });
   }
 
-  if (!isValidNiduetEmail(email)) {
+  if (!isValidNeduetEmail(email)) {
     return res.status(400).json({ success: false, error: 'Invalid NED email address. Email must end with @cloud.neduet.edu.pk' });
   }
 
@@ -80,7 +79,8 @@ router.post('/', (req, res, next) => {
     return res.status(409).json({ success: false, error: 'Email already registered to another user' });
   }
 
-  const hash = bcrypt.hashSync(password, 12);
+  // Non-blocking async password hash
+  const hash = await bcrypt.hash(password, 10);
   const info = db.prepare(`
     INSERT INTO users (username, email, password, full_name, role, dept, is_active, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
@@ -95,7 +95,6 @@ router.post('/', (req, res, next) => {
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
 
-  // Log in audit log
   db.prepare(`
     INSERT INTO audit_logs (action, performed_by, target_user, details, created_at)
     VALUES ('USER_CREATED', ?, ?, ?, datetime('now'))
@@ -114,8 +113,8 @@ router.post('/', (req, res, next) => {
   if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 
   if (email && email !== user.email) {
-    if (!isValidNiduetEmail(email)) {
-      return res.status(400).json({ success: false, error: 'Invalid NIDUET email address' });
+    if (!isValidNeduetEmail(email)) {
+      return res.status(400).json({ success: false, error: 'Invalid NEDUET email address' });
     }
     const existing = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email, id);
     if (existing) {
@@ -150,7 +149,7 @@ router.post('/', (req, res, next) => {
 });
 
 // POST ?action=reset_password  { id, new_password, admin_password }
-router.post('/', (req, res, next) => {
+router.post('/', async (req, res, next) => {
   if (req.query.action !== 'reset_password') return next();
   const { id, new_password, admin_password } = req.body || {};
   if (!id || !new_password) return res.status(400).json({ success: false, error: 'id and new_password are required' });
@@ -162,14 +161,15 @@ router.post('/', (req, res, next) => {
   }
 
   const currentAdmin = db.prepare('SELECT password FROM users WHERE id = ?').get(req.session.user.id);
-  if (!currentAdmin || !bcrypt.compareSync(admin_password, currentAdmin.password)) {
+  const adminOk = await bcrypt.compare(admin_password, currentAdmin ? currentAdmin.password : '');
+  if (!currentAdmin || !adminOk) {
     return res.status(401).json({ success: false, error: 'Incorrect Admin password' });
   }
 
   const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(id);
   if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 
-  const hash = bcrypt.hashSync(new_password, 12);
+  const hash = await bcrypt.hash(new_password, 10);
   db.prepare(`UPDATE users SET password = ?, updated_at = datetime('now') WHERE id = ?`).run(hash, id);
 
   db.prepare(`
@@ -177,11 +177,11 @@ router.post('/', (req, res, next) => {
     VALUES ('ADMIN_RESET_PASSWORD', ?, ?, 'Admin reset password directly', datetime('now'))
   `).run(req.session.user.username, user.username);
 
-  res.json({ success: true });
+  res.json({ success: true, message: 'Password reset successfully' });
 });
 
 // POST ?action=archive  { id, admin_password }  (Replaces hard delete)
-router.post('/', (req, res, next) => {
+router.post('/', async (req, res, next) => {
   if (req.query.action !== 'archive' && req.query.action !== 'delete') return next();
   const { id, admin_password } = req.body || {};
   const userId = id || req.query.id;
@@ -195,9 +195,10 @@ router.post('/', (req, res, next) => {
     return res.status(400).json({ success: false, error: 'You cannot archive your own account while logged in' });
   }
 
-  // Backend Admin password verification
+  // Backend Admin password verification (async non-blocking)
   const currentAdmin = db.prepare('SELECT password FROM users WHERE id = ?').get(req.session.user.id);
-  if (!currentAdmin || !bcrypt.compareSync(admin_password, currentAdmin.password)) {
+  const adminOk = await bcrypt.compare(admin_password, currentAdmin ? currentAdmin.password : '');
+  if (!currentAdmin || !adminOk) {
     return res.status(401).json({ success: false, error: 'Incorrect Admin password' });
   }
 
@@ -224,7 +225,7 @@ router.post('/', (req, res, next) => {
 });
 
 // POST ?action=restore  { id, admin_password }
-router.post('/', (req, res, next) => {
+router.post('/', async (req, res, next) => {
   if (req.query.action !== 'restore') return next();
   const { id, admin_password } = req.body || {};
   if (!id) return res.status(400).json({ success: false, error: 'User id is required' });
@@ -232,9 +233,10 @@ router.post('/', (req, res, next) => {
     return res.status(400).json({ success: false, error: 'Admin password confirmation is required' });
   }
 
-  // Backend Admin password verification
+  // Backend Admin password verification (async non-blocking)
   const currentAdmin = db.prepare('SELECT password FROM users WHERE id = ?').get(req.session.user.id);
-  if (!currentAdmin || !bcrypt.compareSync(admin_password, currentAdmin.password)) {
+  const adminOk = await bcrypt.compare(admin_password, currentAdmin ? currentAdmin.password : '');
+  if (!currentAdmin || !adminOk) {
     return res.status(401).json({ success: false, error: 'Incorrect Admin password' });
   }
 

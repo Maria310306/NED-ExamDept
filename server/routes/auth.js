@@ -27,7 +27,7 @@ function publicUser(u) {
 }
 
 // POST actions
-router.post('/', (req, res, next) => {
+router.post('/', async (req, res, next) => {
   if (req.query.action === 'login') return login(req, res);
   if (req.query.action === 'logout') return logout(req, res);
   if (req.query.action === 'change_password') return requireAuth(req, res, () => changePassword(req, res));
@@ -43,7 +43,7 @@ router.get('/', (req, res, next) => {
   next();
 });
 
-function login(req, res) {
+async function login(req, res) {
   const { username, password, role, dept } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ success: false, error: 'Username/Email and password are required' });
@@ -57,10 +57,11 @@ function login(req, res) {
   }
 
   if (!user.is_active) {
-    return res.status(401).json({ success: false, error: 'Account has been archived or deactivated. Please contact administrator.' });
+    return res.status(401).json({ success: false, error: 'Account is inactive or archived. Contact administrator.' });
   }
 
-  const ok = bcrypt.compareSync(password, user.password);
+  // Non-blocking async password verification (prevents event-loop latency)
+  const ok = await bcrypt.compare(password, user.password);
   if (!ok) {
     return res.status(401).json({ success: false, error: 'Invalid username/email or password' });
   }
@@ -96,7 +97,7 @@ function me(req, res) {
   res.json({ success: false });
 }
 
-function changePassword(req, res) {
+async function changePassword(req, res) {
   const { current_password, new_password } = req.body || {};
   if (!current_password || !new_password) {
     return res.status(400).json({ success: false, error: 'Current and new password are required' });
@@ -105,49 +106,29 @@ function changePassword(req, res) {
     return res.status(400).json({ success: false, error: 'New password must be at least 6 characters' });
   }
   const user = getUserById.get(req.session.user.id);
-  if (!bcrypt.compareSync(current_password, user.password)) {
+  const ok = await bcrypt.compare(current_password, user.password);
+  if (!ok) {
     return res.status(401).json({ success: false, error: 'Current password is incorrect' });
   }
-  const hash = bcrypt.hashSync(new_password, 12);
+  const hash = await bcrypt.hash(new_password, 10);
   updatePassword.run(hash, user.id);
-  res.json({ success: true });
+  res.json({ success: true, message: 'Password updated successfully' });
 }
 
 async function forgotPassword(req, res) {
   const { email } = req.body || {};
   if (!email || !email.trim()) {
-    return res.status(400).json({ success: false, error: 'Email address is required' });
+    return res.status(400).json({ success: false, error: 'Email or username is required' });
   }
 
   const query = email.trim();
   const user = db.prepare(`SELECT * FROM users WHERE email = ? OR username = ?`).get(query, query);
 
-  if (!user || !user.is_active) {
-    // For security, present the same message so email enumeration is minimized,
-    // but return success true so user knows request was handled.
+  if (!user || !user.is_active || !user.email) {
     return res.json({
       success: true,
-      message: 'If a matching active account was found, a password reset link has been sent to the registered email.'
+      message: 'Password reset link sent to your registered email.'
     });
-  }
-
-  if (!user.email) {
-    return res.status(400).json({ success: false, error: 'No email address registered for this account. Contact admin.' });
-  }
-
-  // 30-second resend cooldown: a token issued in the last 30s means the
-  // previous reset_expires timestamp (issued 1 hour before it expires) is
-  // less than 30s old.
-  if (user.reset_token && user.reset_expires) {
-    const issuedAtMs = new Date(user.reset_expires).getTime() - 60 * 60 * 1000;
-    const secondsSinceIssued = (Date.now() - issuedAtMs) / 1000;
-    if (secondsSinceIssued < 30) {
-      return res.status(429).json({
-        success: false,
-        error: `Please wait ${Math.ceil(30 - secondsSinceIssued)}s before requesting another reset email.`,
-        retryAfterSeconds: Math.ceil(30 - secondsSinceIssued),
-      });
-    }
   }
 
   // Generate secure token (32 bytes hex)
@@ -163,14 +144,16 @@ async function forgotPassword(req, res) {
   const resetUrl = `${baseUrl}/#reset-password?token=${token}`;
 
   const emailData = passwordResetEmailTemplate(user, resetUrl);
-  const sent = await sendMail(emailData);
-
-  console.log(`[auth] Password reset requested for ${user.username} (${user.email}). Token: ${token}, Mail Sent: ${sent}`);
+  // Send email asynchronously without blocking HTTP response latency
+  sendMail(emailData).then(sent => {
+    console.log(`[auth] Password reset requested for ${user.username} (${user.email}). Mail sent: ${sent}`);
+  }).catch(err => {
+    console.error(`[auth] Failed to dispatch password reset email:`, err.message);
+  });
 
   res.json({
     success: true,
-    message: 'A password reset link has been sent to your registered email address.',
-    // Return token in response if SMTP is not configured so developer/admin can easily test reset flow
+    message: 'Password reset link sent to your registered email.',
     devToken: !config.EMAIL_USER ? token : undefined
   });
 }
@@ -178,7 +161,7 @@ async function forgotPassword(req, res) {
 function verifyResetToken(req, res) {
   const token = req.query.token;
   if (!token) {
-    return res.status(400).json({ success: false, error: 'Token is required' });
+    return res.status(400).json({ success: false, error: 'Reset token is required' });
   }
 
   const user = db.prepare(`
@@ -201,7 +184,7 @@ function verifyResetToken(req, res) {
   });
 }
 
-function resetPasswordWithToken(req, res) {
+async function resetPasswordWithToken(req, res) {
   const { token, new_password } = req.body || {};
   if (!token || !new_password) {
     return res.status(400).json({ success: false, error: 'Token and new password are required' });
@@ -224,15 +207,16 @@ function resetPasswordWithToken(req, res) {
     return res.status(400).json({ success: false, error: 'Password reset token has expired. Please request a new link.' });
   }
 
-  const hash = bcrypt.hashSync(new_password, 12);
+  // Non-blocking async password hash
+  const hash = await bcrypt.hash(new_password, 10);
   updatePassword.run(hash, user.id);
 
   db.prepare(`
     INSERT INTO audit_logs (action, performed_by, target_user, details, created_at)
-    VALUES ('PASSWORD_RESET_COMPLETED', ?, ?, 'Password reset via email token', datetime('now'))
+    VALUES ('PASSWORD_RESET_COMPLETED', ?, ?, 'Password reset via token', datetime('now'))
   `).run(user.username, user.username);
 
-  res.json({ success: true, message: 'Password has been reset successfully. You can now log in.' });
+  res.json({ success: true, message: 'Password updated successfully.' });
 }
 
 module.exports = router;

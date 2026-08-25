@@ -55,16 +55,41 @@ function toText(rows, intro) {
   return intro + '\n\n' + rows.map(([label, value]) => `${label}: ${String(value).replace(/<[^>]+>/g, '')}`).join('\n');
 }
 
+/** Helper to format courier option label for email notifications */
+function formatCourierLabel(courier) {
+  if (courier === 'local') return 'Local Courier (within Pakistan)';
+  if (courier === 'intl') return 'International Courier';
+  return 'Counter Pickup (No Courier)';
+}
+
 /** Sent when a request is first submitted at the counter. */
 function receivedEmailTemplate(request) {
   const expectedDate = calcExpectedDate(request.submitted_at || request.datetime_fmt, request.delivery);
+  const courier = request.courier || 'none';
+  const courierLabel = formatCourierLabel(courier);
+
   const rows = [
     ['Request ID', request.id],
     ['Document', request.doc_label || request.docLabel],
     ['Section', request.dept],
+    ['Delivery Type', request.delivery || 'Normal'],
+    ['Courier Option', courierLabel],
     ['Expected By', expectedDate],
   ];
-  const intro = `Dear ${request.student_name || request.name}, your document request has been recorded and is now being processed. You will receive another email once your document is ready.`;
+
+  let intro = `Dear ${request.student_name || request.name}, your document request has been recorded and is now being processed.`;
+  let footerNote = 'Please keep your Request ID for reference.';
+
+  if (courier === 'local') {
+    intro += ' Once completed, your document will be dispatched to your address via Local Courier.';
+    footerNote += ' You will receive notification once your package is handed over to the courier.';
+  } else if (courier === 'intl') {
+    intro += ' Once completed, your document will be dispatched to your overseas address via International Courier.';
+    footerNote += ' You will receive notification once your package is handed over to the courier.';
+  } else {
+    intro += ' You will receive another email once your document is ready for collection at the counter.';
+    footerNote += ' You can use your Request ID to check status or collect your document at the counter.';
+  }
 
   return {
     to: request.email,
@@ -73,7 +98,7 @@ function receivedEmailTemplate(request) {
       heading: 'Request Received',
       intro,
       rows,
-      footerNote: 'Please keep your Request ID for reference. You can use it to check on the status of your request at the counter.',
+      footerNote,
     }),
     text: toText(rows, intro),
   };
@@ -81,21 +106,46 @@ function receivedEmailTemplate(request) {
 
 /** Sent when a request's status is changed to Completed by any section. */
 function completedEmailTemplate(request) {
+  const courier = request.courier || 'none';
+  const courierLabel = formatCourierLabel(courier);
+
   const rows = [
     ['Request ID', request.id],
     ['Document', request.doc_label || request.docLabel],
     ['Section', request.dept],
+    ['Courier Option', courierLabel],
   ];
-  const intro = `Dear ${request.student_name || request.name}, your document has been prepared and is ready for collection. Please visit the counter with your Request ID to collect it.`;
+
+  let subject = `Document Ready — ${request.id}`;
+  let heading = 'Your Document Is Ready';
+  let intro = `Dear ${request.student_name || request.name}, your document has been prepared.`;
+  let footerNote = 'Thank you for using the University Examination Department portal.';
+
+  if (courier === 'local') {
+    subject = `Document Dispatched via Local Courier — ${request.id}`;
+    heading = 'Your Document Has Been Dispatched';
+    intro += ' It has been prepared and dispatched via Local Courier to your registered address.';
+    footerNote = 'Please ensure someone is available at your address to receive the delivery. Keep your Request ID for reference.';
+  } else if (courier === 'intl') {
+    subject = `Document Dispatched via International Courier — ${request.id}`;
+    heading = 'Your Document Has Been Dispatched';
+    intro += ' It has been prepared and dispatched via International Courier to your overseas address.';
+    footerNote = 'Your document package is on its way. Keep your Request ID for tracking reference.';
+  } else {
+    subject = `Document Ready for Collection — ${request.id}`;
+    heading = 'Your Document Is Ready for Collection';
+    intro += ' It is ready for collection at the Examination Department counter.';
+    footerNote = 'Please bring a valid CNIC/ID and your Request ID when collecting your document at the counter.';
+  }
 
   return {
     to: request.email,
-    subject: `Document Ready — ${request.id}`,
+    subject,
     html: wrap({
-      heading: 'Your Document Is Ready',
+      heading,
       intro,
       rows,
-      footerNote: 'Please bring a valid CNIC/ID when collecting your document.',
+      footerNote,
     }),
     text: toText(rows, intro),
   };

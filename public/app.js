@@ -1916,7 +1916,7 @@ function renderUsersTable() {
         <th>ID</th>
         <th>Full Name</th>
         <th>Username</th>
-        <th>NIDUET Email</th>
+        <th>NEDUET Email</th>
         <th>Role</th>
         <th>Department</th>
         <th>Actions</th>
@@ -1949,7 +1949,7 @@ function renderUsersTable() {
         <th>ID</th>
         <th>Full Name</th>
         <th>Username</th>
-        <th>NIDUET Email</th>
+        <th>NEDUET Email</th>
         <th>Role</th>
         <th>Archived Date</th>
         <th>Archived By</th>
@@ -2162,7 +2162,7 @@ function closeForgotPasswordModal() {
   modal.classList.remove('active');
 }
 
-const NIDUET_EMAIL_RE = /^[a-zA-Z0-9._%+-]+@cloud\.neduet\.edu\.pk$/i;
+const NEDUET_EMAIL_RE = /^[a-zA-Z0-9._%+-]+@cloud\.neduet\.edu\.pk$/i;
 let _forgotPasswordEmail = '';
 let _resendCountdownTimer = null;
 
@@ -2170,7 +2170,7 @@ async function submitForgotPassword(e) {
   e.preventDefault();
   const email = document.getElementById('forgot-email-input').value.trim();
   if (!email) { showToast('Enter your registered NED email', 'error'); return; }
-  if (!NIDUET_EMAIL_RE.test(email)) {
+  if (!NEDUET_EMAIL_RE.test(email)) {
     showToast('Enter a valid @cloud.neduet.edu.pk email address', 'error');
     return;
   }
@@ -2405,4 +2405,4 @@ function promptRestoreBackup(backupId, filename) {
       loadBackups();
     }
   );
-}
+}

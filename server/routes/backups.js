@@ -39,9 +39,9 @@ router.post('/', async (req, res, next) => {
     return res.status(400).json({ success: false, error: 'backup_id and admin_password are required' });
   }
 
-  // Verify admin password
   const adminUser = db.prepare('SELECT password FROM users WHERE id = ?').get(req.session.user.id);
-  if (!adminUser || !bcrypt.compareSync(admin_password, adminUser.password)) {
+  const ok = await bcrypt.compare(admin_password, adminUser ? adminUser.password : '');
+  if (!adminUser || !ok) {
     return res.status(401).json({ success: false, error: 'Incorrect Admin password' });
   }
 

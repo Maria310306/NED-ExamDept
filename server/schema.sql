@@ -12,7 +12,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS users (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     username    TEXT NOT NULL UNIQUE,
-    email       TEXT UNIQUE,            -- NIDUET email (@cloud.neduet.edu.pk or @neduet.edu.pk)
+    email       TEXT UNIQUE,            -- NEDUET email (@cloud.neduet.edu.pk or @neduet.edu.pk)
     password    TEXT NOT NULL,          -- bcrypt hash
     full_name   TEXT NOT NULL,
     role        TEXT NOT NULL DEFAULT 'data-entry'
