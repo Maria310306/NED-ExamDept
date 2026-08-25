@@ -14,10 +14,7 @@ const authRoutes = require('./routes/auth');
 const requestsRoutes = require('./routes/requests');
 const usersRoutes = require('./routes/users');
 const backupsRoutes = require('./routes/backups');
-const backupService = require('./backupService');
-
-// Initialize daily automated database backup
-backupService.initScheduler();
+const { ensureDailyBackup } = require('./backupService');
 
 const app = express();
 app.disable('x-powered-by');
@@ -67,4 +64,11 @@ app.use((req, res) => res.status(404).json({ success: false, error: 'Not found' 
 
 app.listen(config.PORT, () => {
   console.log(`ExamPortal running at http://localhost:${config.PORT}  (env: ${config.ENV})`);
+
+  // Daily backups: check once at startup, then every hour — whichever check
+  // finds no successful backup yet for "today" creates one automatically.
+  ensureDailyBackup().catch(err => console.error('[backup] Startup backup check failed:', err.message));
+  setInterval(() => {
+    ensureDailyBackup().catch(err => console.error('[backup] Hourly backup check failed:', err.message));
+  }, 60 * 60 * 1000);
 });

@@ -176,7 +176,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     if (document.getElementById('login-screen').style.display !== 'none') { doLogin(); return; }
   }
-  if (e.key === 'Escape') { acClose(); closeModal(); closeConfirmModal(); }
+  if (e.key === 'Escape') { acClose(); closeModal(); closeConfirmModal(); closeEnterTokenModal(); closeSetUserPasswordModal(); }
 });
 
 async function doLogin() {
@@ -1325,19 +1325,18 @@ function renderAdminTable(rows, total) {
 }
 
 async function deleteRequest(id) {
-  openConfirmModal({
-    title: `Delete ${id}?`,
-    message: 'This will permanently remove the request, its transfer history, and any linked documents. This cannot be undone.',
-    okLabel: 'Delete',
-    onConfirm: async () => {
-      const res = await API.del(`requests.php?action=delete&id=${encodeURIComponent(id)}`, {});
+  openAdminPassModal(
+    `Delete Request ${id}?`,
+    'This will permanently remove the request, its transfer history, and any linked documents. This cannot be undone. Enter your Admin Password to confirm:',
+    async (admin_password) => {
+      const res = await API.del(`requests.php?action=delete&id=${encodeURIComponent(id)}`, { admin_password });
       if (!res.success) { showToast(res.error || 'Delete failed', 'error'); return; }
       showToast(`Request ${id} deleted`);
       loadAndRenderAdminTable();
       loadAdminDash();
       updatePreviewStats();
-    },
-  });
+    }
+  );
 }
 
 /* ── Generic confirm dialog (theme-matched replacement for window.confirm) ── */
@@ -1363,6 +1362,8 @@ document.getElementById('confirm-modal-ok-btn').addEventListener('click', async 
   if (handler) await handler();
 });
 document.getElementById('confirm-modal-overlay').addEventListener('click', function(e) { if (e.target === this) closeConfirmModal(); });
+document.getElementById('enter-token-modal-overlay').addEventListener('click', function(e) { if (e.target === this) closeEnterTokenModal(); });
+document.getElementById('set-user-password-modal-overlay').addEventListener('click', function(e) { if (e.target === this) closeSetUserPasswordModal(); });
 
 async function exportCSV() {
   const params = {
@@ -2102,19 +2103,44 @@ function promptRestoreUser(userId, username) {
   );
 }
 
-async function promptResetUserPassword(userId, username) {
-  const newPass = prompt(`Enter new password for account "${username}":`);
-  if (!newPass) return;
-  if (newPass.length < 6) {
+function promptResetUserPassword(userId, username) {
+  document.getElementById('set-user-password-user-id').value = userId;
+  document.getElementById('set-user-password-sub').textContent = `For account "${username}"`;
+  document.getElementById('set-user-password-input').value = '';
+  const modal = document.getElementById('set-user-password-modal-overlay');
+  modal.classList.add('open');
+  modal.classList.add('active');
+  setTimeout(() => document.getElementById('set-user-password-input').focus(), 100);
+}
+
+function closeSetUserPasswordModal() {
+  const modal = document.getElementById('set-user-password-modal-overlay');
+  modal.classList.remove('open');
+  modal.classList.remove('active');
+}
+
+function submitSetUserPassword(e) {
+  e.preventDefault();
+  const userId = document.getElementById('set-user-password-user-id').value;
+  const newPass = document.getElementById('set-user-password-input').value;
+  if (!newPass || newPass.length < 6) {
     showToast('Password must be at least 6 characters', 'error');
     return;
   }
-  const res = await API.post('users.php?action=reset_password', { id: userId, new_password: newPass });
-  if (!res.success) {
-    showToast(res.error || 'Failed to reset password', 'error');
-    return;
-  }
-  showToast(`Password for ${username} updated successfully`, 'success');
+  closeSetUserPasswordModal();
+
+  openAdminPassModal(
+    'Confirm Password Reset',
+    'Enter your Admin Password to confirm setting this new password:',
+    async (admin_password) => {
+      const res = await API.post('users.php?action=reset_password', { id: userId, new_password: newPass, admin_password });
+      if (!res.success) {
+        showToast(res.error || 'Failed to reset password', 'error');
+        return;
+      }
+      showToast('Password updated successfully', 'success');
+    }
+  );
 }
 
 /* ══════════════════════════════════════════
@@ -2136,43 +2162,117 @@ function closeForgotPasswordModal() {
   modal.classList.remove('active');
 }
 
-function openResetTokenPrompt() {
-  closeForgotPasswordModal();
-  const token = prompt("If you have received a reset token, enter or paste it below:");
-  if (token && token.trim()) {
-    openResetPasswordWithToken(token.trim());
-  }
-}
+const NIDUET_EMAIL_RE = /^[a-zA-Z0-9._%+-]+@cloud\.neduet\.edu\.pk$/i;
+let _forgotPasswordEmail = '';
+let _resendCountdownTimer = null;
 
 async function submitForgotPassword(e) {
   e.preventDefault();
   const email = document.getElementById('forgot-email-input').value.trim();
-  if (!email) { showToast('Enter registered email or username', 'error'); return; }
-
-  const res = await API.post('auth.php?action=forgot_password', { email });
-  if (!res.success) {
-    showToast(res.error || 'Failed to process request', 'error');
+  if (!email) { showToast('Enter your registered NED email', 'error'); return; }
+  if (!NIDUET_EMAIL_RE.test(email)) {
+    showToast('Enter a valid @cloud.neduet.edu.pk email address', 'error');
     return;
   }
 
-  closeForgotPasswordModal();
-  showToast(res.message || 'Password reset link sent to email', 'success');
+  const res = await requestPasswordResetToken(email);
+  if (!res) return; // error already shown
 
-  if (res.devToken) {
-    // If SMTP is not configured or in dev environment, offer direct one-click token reset
-    setTimeout(() => {
-      if (confirm(`Password reset token generated: ${res.devToken}\n\nWould you like to reset your password now?`)) {
-        openResetPasswordWithToken(res.devToken);
-      }
-    }, 300);
-  } else {
-    setTimeout(() => {
-      const enterTokenNow = confirm('If you already have your password reset token, click OK to enter it now.');
-      if (enterTokenNow) {
-        openResetTokenPrompt();
-      }
-    }, 400);
+  closeForgotPasswordModal();
+  _forgotPasswordEmail = email;
+  showToast(res.message || 'Password reset link sent to email', 'success');
+  openEnterTokenModal(res.devToken);
+}
+
+/** Calls the forgot_password endpoint; returns the response on success,
+ *  or null after showing a toast on failure (including rate-limit). */
+async function requestPasswordResetToken(email) {
+  const res = await API.post('auth.php?action=forgot_password', { email });
+  if (!res.success) {
+    showToast(res.error || 'Failed to process request', 'error');
+    return null;
   }
+  return res;
+}
+
+function openEnterTokenModal(devToken) {
+  document.getElementById('enter-token-input').value = '';
+  document.getElementById('enter-token-modal-sub').textContent =
+    `We've sent a verification token to ${_forgotPasswordEmail}.`;
+
+  const devHint = document.getElementById('enter-token-dev-hint');
+  if (devToken) {
+    devHint.style.display = 'block';
+    devHint.textContent = `Dev mode (email not configured) — your token: ${devToken}`;
+  } else {
+    devHint.style.display = 'none';
+    devHint.textContent = '';
+  }
+
+  const modal = document.getElementById('enter-token-modal-overlay');
+  modal.classList.add('open');
+  modal.classList.add('active');
+  setTimeout(() => document.getElementById('enter-token-input').focus(), 100);
+  startResendCountdown();
+}
+
+function closeEnterTokenModal() {
+  const modal = document.getElementById('enter-token-modal-overlay');
+  modal.classList.remove('open');
+  modal.classList.remove('active');
+  if (_resendCountdownTimer) { clearInterval(_resendCountdownTimer); _resendCountdownTimer = null; }
+}
+
+function startResendCountdown(seconds = 30) {
+  const btn = document.getElementById('resend-token-btn');
+  const countEl = document.getElementById('resend-countdown');
+  let remaining = seconds;
+  btn.disabled = true;
+  countEl.parentElement.style.display = '';
+  countEl.textContent = remaining;
+
+  if (_resendCountdownTimer) clearInterval(_resendCountdownTimer);
+  _resendCountdownTimer = setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      clearInterval(_resendCountdownTimer);
+      _resendCountdownTimer = null;
+      btn.disabled = false;
+      btn.textContent = 'Resend Token';
+    } else {
+      countEl.textContent = remaining;
+    }
+  }, 1000);
+}
+
+async function resendResetToken() {
+  if (!_forgotPasswordEmail) return;
+  const res = await requestPasswordResetToken(_forgotPasswordEmail);
+  if (!res) return;
+  showToast(res.message || 'Reset token resent', 'success');
+  document.getElementById('resend-token-btn').innerHTML = 'Resend in <span id="resend-countdown">30</span>s';
+  const devHint = document.getElementById('enter-token-dev-hint');
+  if (res.devToken) {
+    devHint.style.display = 'block';
+    devHint.textContent = `Dev mode (email not configured) — your token: ${res.devToken}`;
+  }
+  startResendCountdown();
+}
+
+async function submitEnterToken(e) {
+  e.preventDefault();
+  const token = document.getElementById('enter-token-input').value.trim();
+  if (!token) { showToast('Enter your reset token', 'error'); return; }
+
+  const res = await API.get('auth.php?action=verify_reset_token', { token });
+  if (!res.success) {
+    showToast(res.error || 'Invalid or expired token', 'error');
+    return;
+  }
+
+  closeEnterTokenModal();
+  document.getElementById('reset-password-modal-sub').textContent = `Resetting password for ${res.username} (${res.email})`;
+  openResetPasswordWithToken(token);
 }
 
 function openResetPasswordWithToken(token) {

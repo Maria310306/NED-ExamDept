@@ -5,6 +5,10 @@
   counter / result / degree / external / masters / admin — all with
   password "password" (bcrypt-hashed here at seed time).
 
+  Each gets a placeholder @cloud.neduet.edu.pk email so "Forgot Password"
+  works out of the box for testing. Replace these with real registered
+  emails via Manage Users before real use.
+
   Safe to re-run: uses INSERT OR IGNORE, so it never overwrites
   existing accounts or passwords that have already been changed.
 */
@@ -29,19 +33,12 @@ const insert = db.prepare(`
   VALUES (@username, @email, @password, @full_name, @role, @dept)
 `);
 
-const updateEmailIfNull = db.prepare(`
-  UPDATE users SET email = @email WHERE username = @username AND (email IS NULL OR email = '')
-`);
-
 const tx = db.transaction((rows) => {
-  for (const u of rows) {
-    insert.run({ ...u, password: hash });
-    updateEmailIfNull.run({ username: u.username, email: u.email });
-  }
+  for (const u of rows) insert.run({ ...u, password: hash });
 });
 
 tx(users);
 
 console.log(`Seed complete. Default users ready (password: "${DEFAULT_PASSWORD}"):`);
-users.forEach(u => console.log(`  - ${u.username}  (${u.role}${u.dept ? ', ' + u.dept : ''})`));
-console.log('\nChange these passwords before real use — see README.');
+users.forEach(u => console.log(`  - ${u.username}  (${u.role}${u.dept ? ', ' + u.dept : ''}) — ${u.email}`));
+console.log('\nChange these passwords (and set real emails) before real use — see README.');

@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../authGuards');
 const { serializeRequest } = require('../format');
@@ -307,9 +308,25 @@ const deleteRequestStmt = db.prepare('DELETE FROM requests WHERE id = ?');
 router.delete('/', requireRole('admin'), (req, res, next) => {
   if (req.query.action !== 'delete') return next();
   const id = req.query.id;
+  const { admin_password } = req.body || {};
   if (!id) return res.status(400).json({ success: false, error: 'id is required' });
+  if (!admin_password) {
+    return res.status(400).json({ success: false, error: 'Admin password confirmation is required' });
+  }
+
+  const adminUser = db.prepare('SELECT password FROM users WHERE id = ?').get(req.session.user.id);
+  if (!adminUser || !bcrypt.compareSync(admin_password, adminUser.password)) {
+    return res.status(401).json({ success: false, error: 'Incorrect Admin password' });
+  }
+
   const result = deleteRequestStmt.run(id);
   if (result.changes === 0) return res.status(404).json({ success: false, error: 'Request not found' });
+
+  db.prepare(`
+    INSERT INTO audit_logs (action, performed_by, target_user, details, created_at)
+    VALUES ('REQUEST_DELETED', ?, NULL, ?, datetime('now'))
+  `).run(req.session.user.username, `Deleted request ${id}`);
+
   res.json({ success: true });
 });
 

@@ -2,150 +2,118 @@
 
 const path = require('path');
 const fs = require('fs');
+const Database = require('better-sqlite3');
 const db = require('./db');
 
 const BACKUP_DIR = path.join(__dirname, '..', 'data', 'backups');
-const RETENTION_DAYS = 30;
-const DAY_IN_MS = 24 * 60 * 60 * 1000;
-
-// Ensure backup folder exists
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
+const insertBackupRow = db.prepare(`
+  INSERT INTO backups (filename, filepath, size_bytes, status, error_message, created_at)
+  VALUES (?, ?, ?, ?, ?, datetime('now'))
+`);
+
+function timestampForFilename() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
 /**
- * Creates a database backup file using SQLite WAL-safe backup or file copy.
- * @returns {Promise<{success: boolean, backup?: object, error?: string}>}
+ * Creates a live, consistent backup of the database using SQLite's Online
+ * Backup API (via better-sqlite3's db.backup()) — safe to run while the
+ * server is actively being used, no downtime or locking required.
  */
 async function createBackup() {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const filename = `examportal_backup_${timestamp}.db`;
-  const targetPath = path.join(BACKUP_DIR, filename);
+  const filename = `examportal-${timestampForFilename()}.db`;
+  const filepath = path.join(BACKUP_DIR, filename);
 
   try {
-    // Uses better-sqlite3 native backup API if available, or synchronous safe backup
-    if (typeof db.backup === 'function') {
-      await db.backup(targetPath);
-    } else {
-      // Fallback: WAL checkpoint then copy
-      db.pragma('wal_checkpoint(TRUNCATE)');
-      const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'examportal.db');
-      fs.copyFileSync(dbPath, targetPath);
-    }
+    await db.backup(filepath);
 
-    const stats = fs.statSync(targetPath);
-    const sizeBytes = stats.size;
+    // The live database runs in WAL mode, and db.backup() preserves that
+    // setting in the copy — which then needs a -wal/-shm sidecar to open
+    // cleanly and can cause "database is locked" when attached later for
+    // a restore. Converting the backup to plain rollback-journal mode
+    // makes it a fully self-contained single file, safe to attach anytime.
+    const backupConn = new Database(filepath);
+    backupConn.pragma('journal_mode = DELETE');
+    backupConn.close();
 
-    const stmt = db.prepare(`
-      INSERT INTO backups (filename, filepath, size_bytes, status, created_at)
-      VALUES (?, ?, ?, 'success', datetime('now'))
-    `);
-    const info = stmt.run(filename, targetPath, sizeBytes);
-
-    const backupRecord = db.prepare('SELECT * FROM backups WHERE id = ?').get(info.lastInsertRowid);
-    console.log('[backupService] Backup created successfully:', filename, `(${sizeBytes} bytes)`);
-
-    // Clean up old backups based on retention policy
-    cleanOldBackups();
-
-    return { success: true, backup: backupRecord };
+    const sizeBytes = fs.statSync(filepath).size;
+    const info = insertBackupRow.run(filename, filepath, sizeBytes, 'success', null);
+    const row = db.prepare('SELECT * FROM backups WHERE id = ?').get(info.lastInsertRowid);
+    return { success: true, backup: row };
   } catch (err) {
-    console.error('[backupService] Backup failed:', err.message);
-    try {
-      db.prepare(`
-        INSERT INTO backups (filename, filepath, size_bytes, status, error_message, created_at)
-        VALUES (?, ?, 0, 'failed', ?, datetime('now'))
-      `).run(filename, targetPath, err.message);
-    } catch (dbErr) {
-      console.error('[backupService] Failed to record backup failure in DB:', dbErr.message);
-    }
+    insertBackupRow.run(filename, filepath, 0, 'failed', err.message);
     return { success: false, error: err.message };
   }
 }
 
-/**
- * Clean up backups older than RETENTION_DAYS
- */
-function cleanOldBackups() {
-  try {
-    const cutoffDate = new Date(Date.now() - RETENTION_DAYS * DAY_IN_MS).toISOString();
-    const oldBackups = db.prepare("SELECT * FROM backups WHERE created_at < ?").all(cutoffDate);
-
-    for (const b of oldBackups) {
-      if (b.filepath && fs.existsSync(b.filepath)) {
-        try {
-          fs.unlinkSync(b.filepath);
-          console.log('[backupService] Pruned old backup file:', b.filename);
-        } catch (e) {
-          console.error('[backupService] Failed to delete backup file:', b.filename, e.message);
-        }
-      }
-      db.prepare("DELETE FROM backups WHERE id = ?").run(b.id);
-    }
-  } catch (err) {
-    console.error('[backupService] Error during backup cleanup:', err.message);
-  }
-}
+// Tables holding actual application data — restored from the backup.
+// `backups` and `audit_logs` are intentionally NOT restored, so the
+// history of backups/actions taken remains intact across a restore.
+const DATA_TABLES = ['users', 'requests', 'verification_details', 'transfer_log', 'request_serial'];
 
 /**
- * Restores the database from a specified backup file.
- * @param {number} backupId
+ * Restores application data from a previously created backup file.
+ * Uses SQLite's ATTACH DATABASE to copy table contents from the backup
+ * file into the live database inside a single transaction — this works
+ * without restarting the server or closing the live connection.
  */
 async function restoreBackup(backupId) {
-  const backup = db.prepare("SELECT * FROM backups WHERE id = ? AND status = 'success'").get(backupId);
-  if (!backup) {
-    throw new Error('Backup record not found or backup was unsuccessful');
+  const row = db.prepare('SELECT * FROM backups WHERE id = ?').get(backupId);
+  if (!row) throw new Error('Backup not found');
+  if (row.status !== 'success') throw new Error('Cannot restore from a failed backup');
+  if (!fs.existsSync(row.filepath)) throw new Error('Backup file no longer exists on disk');
+
+  const escapedPath = row.filepath.replace(/'/g, "''");
+
+  // Note: ATTACH DATABASE cannot run inside an active transaction (SQLite
+  // rejects it), so attach/detach happen outside db.transaction() — only
+  // the actual table copy is wrapped, so a failure partway through still
+  // rolls back cleanly.
+  db.pragma('foreign_keys = OFF');
+  db.exec(`ATTACH DATABASE '${escapedPath}' AS restoresrc`);
+  try {
+    const copyAll = db.transaction(() => {
+      for (const table of DATA_TABLES) {
+        db.exec(`DELETE FROM main.${table}`);
+        db.exec(`INSERT INTO main.${table} SELECT * FROM restoresrc.${table}`);
+      }
+    });
+    copyAll();
+  } finally {
+    db.exec('DETACH DATABASE restoresrc');
+    db.pragma('foreign_keys = ON');
   }
 
-  if (!fs.existsSync(backup.filepath)) {
-    throw new Error(`Backup file does not exist on disk: ${backup.filename}`);
-  }
-
-  const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'examportal.db');
-  
-  // Perform checkpoint before restore
-  db.pragma('wal_checkpoint(TRUNCATE)');
-  
-  // Copy backup file over active DB
-  fs.copyFileSync(backup.filepath, dbPath);
-  
-  console.log('[backupService] Database restored successfully from backup:', backup.filename);
-  return { success: true, filename: backup.filename };
+  return { filename: row.filename };
 }
 
 /**
- * Initializes automatic daily scheduler.
+ * Ensures at least one successful backup exists for "today" (local server
+ * date). Called once at startup and then checked hourly — this is what
+ * makes backups happen automatically every day without any manual action.
  */
-function initScheduler() {
-  // Check if a backup ran today; if not, run one immediately, then schedule every 24h
-  const lastBackup = db.prepare("SELECT created_at FROM backups WHERE status = 'success' ORDER BY id DESC LIMIT 1").get();
-  let delay = 0;
+async function ensureDailyBackup() {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayStartSql = todayStart.toISOString().slice(0, 19).replace('T', ' ');
 
-  if (lastBackup && lastBackup.created_at) {
-    const lastTime = new Date(lastBackup.created_at.replace(' ', 'T') + 'Z').getTime();
-    const elapsed = Date.now() - lastTime;
-    if (elapsed >= DAY_IN_MS) {
-      createBackup();
-      delay = DAY_IN_MS;
-    } else {
-      delay = DAY_IN_MS - elapsed;
-    }
+  const existing = db.prepare(`
+    SELECT id FROM backups WHERE status = 'success' AND created_at >= ? LIMIT 1
+  `).get(todayStartSql);
+
+  if (existing) return; // already have one for today
+
+  console.log('[backup] No backup found for today — creating one now...');
+  const result = await createBackup();
+  if (result.success) {
+    console.log('[backup] Daily backup created:', result.backup.filename);
   } else {
-    // First run
-    createBackup();
-    delay = DAY_IN_MS;
+    console.error('[backup] Daily backup FAILED:', result.error);
   }
-
-  // Schedule recurring daily backup
-  setTimeout(() => {
-    createBackup();
-    setInterval(createBackup, DAY_IN_MS);
-  }, delay);
-
-  console.log('[backupService] Automatic daily database backup service initialized.');
 }
 
-module.exports = {
-  createBackup,
-  cleanOldBackups,
-  restoreBackup,
-  initScheduler,
-};
+module.exports = { createBackup, restoreBackup, ensureDailyBackup, BACKUP_DIR };

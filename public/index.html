@@ -1037,6 +1037,35 @@
     </div>
   </div>
 
+  <!-- Set New User Password Modal (admin: Manage Users → Password button) -->
+  <div class="modal-overlay" id="set-user-password-modal-overlay">
+    <div class="modal-box" style="max-width:400px">
+      <div class="modal-header">
+        <div>
+          <div class="modal-req-id">Set New Password</div>
+          <div class="modal-student" id="set-user-password-sub">For account "username"</div>
+        </div>
+        <button class="modal-close" onclick="closeSetUserPasswordModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12.5px;color:var(--muted,#6b7280);margin:0 0 16px 0;line-height:1.5;">
+          Passwords are stored as one-way encrypted hashes and can never be viewed or recovered — only reset to a new value.
+        </p>
+        <form onsubmit="submitSetUserPassword(event)">
+          <input type="hidden" id="set-user-password-user-id" />
+          <div class="field-group" style="margin-bottom:20px;">
+            <label class="field-label">New Password <span class="req-star">*</span></label>
+            <input class="field-input" type="password" id="set-user-password-input" placeholder="••••••••" required minlength="6" />
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button type="button" class="btn-secondary" onclick="closeSetUserPasswordModal()">Cancel</button>
+            <button type="submit" class="btn-primary">Continue</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Forgot Password Modal -->
   <div class="modal-overlay" id="forgot-password-modal-overlay">
     <div class="modal-box" style="max-width:420px">
@@ -1056,6 +1085,38 @@
           <div style="display:flex;gap:10px;justify-content:flex-end">
             <button type="button" class="btn-secondary" onclick="closeForgotPasswordModal()">Cancel</button>
             <button type="submit" class="btn-primary">Send Reset Link</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Enter Reset Token Modal -->
+  <div class="modal-overlay" id="enter-token-modal-overlay">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-header">
+        <div>
+          <div class="modal-req-id">Enter Reset Token</div>
+          <div class="modal-student" id="enter-token-modal-sub">We've sent a verification token to your email.</div>
+        </div>
+        <button class="modal-close" onclick="closeEnterTokenModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <form onsubmit="submitEnterToken(event)">
+          <div class="field-group" style="margin-bottom:14px;">
+            <label class="field-label">Reset Token <span class="req-star">*</span></label>
+            <input class="field-input" type="text" id="enter-token-input" placeholder="Paste your token here" required autocomplete="off" />
+          </div>
+          <div id="enter-token-dev-hint" style="display:none;font-size:12px;color:var(--muted,#6b7280);background:#f3f4f6;border-radius:6px;padding:8px 10px;margin-bottom:14px;word-break:break-all;"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+            <button type="button" class="btn-link" id="resend-token-btn" onclick="resendResetToken()" disabled
+              style="background:none;border:none;color:var(--accent,#0f766e);font-size:12.5px;font-weight:600;cursor:pointer;padding:0;">
+              Resend in <span id="resend-countdown">30</span>s
+            </button>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button type="button" class="btn-secondary" onclick="closeEnterTokenModal()">Cancel</button>
+            <button type="submit" class="btn-primary">Verify Token</button>
           </div>
         </form>
       </div>

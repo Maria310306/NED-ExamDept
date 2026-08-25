@@ -12,8 +12,8 @@ const VALID_ROLES = ['data-entry', 'department', 'admin'];
 
 function isValidNiduetEmail(email) {
   if (!email || typeof email !== 'string') return false;
-  // Validates @cloud.neduet.edu.pk or @neduet.edu.pk
-  return /^[a-zA-Z0-9._%+-]+@(cloud\.)?neduet\.edu\.pk$/i.test(email.trim());
+  // Validates @cloud.neduet.edu.pk only
+  return /^[a-zA-Z0-9._%+-]+@cloud\.neduet\.edu\.pk$/i.test(email.trim());
 }
 
 function publicUser(u) {
@@ -59,7 +59,7 @@ router.post('/', (req, res, next) => {
   }
 
   if (!isValidNiduetEmail(email)) {
-    return res.status(400).json({ success: false, error: 'Invalid NIDUET email address. Email must end with @cloud.neduet.edu.pk or @neduet.edu.pk' });
+    return res.status(400).json({ success: false, error: 'Invalid NED email address. Email must end with @cloud.neduet.edu.pk' });
   }
 
   if (!VALID_ROLES.includes(role)) {
@@ -149,14 +149,23 @@ router.post('/', (req, res, next) => {
   res.json({ success: true, user: publicUser(updated) });
 });
 
-// POST ?action=reset_password  { id, new_password }
+// POST ?action=reset_password  { id, new_password, admin_password }
 router.post('/', (req, res, next) => {
   if (req.query.action !== 'reset_password') return next();
-  const { id, new_password } = req.body || {};
+  const { id, new_password, admin_password } = req.body || {};
   if (!id || !new_password) return res.status(400).json({ success: false, error: 'id and new_password are required' });
+  if (!admin_password) {
+    return res.status(400).json({ success: false, error: 'Admin password confirmation is required' });
+  }
   if (String(new_password).length < 6) {
     return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
   }
+
+  const currentAdmin = db.prepare('SELECT password FROM users WHERE id = ?').get(req.session.user.id);
+  if (!currentAdmin || !bcrypt.compareSync(admin_password, currentAdmin.password)) {
+    return res.status(401).json({ success: false, error: 'Incorrect Admin password' });
+  }
+
   const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(id);
   if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 

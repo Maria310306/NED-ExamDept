@@ -135,6 +135,21 @@ async function forgotPassword(req, res) {
     return res.status(400).json({ success: false, error: 'No email address registered for this account. Contact admin.' });
   }
 
+  // 30-second resend cooldown: a token issued in the last 30s means the
+  // previous reset_expires timestamp (issued 1 hour before it expires) is
+  // less than 30s old.
+  if (user.reset_token && user.reset_expires) {
+    const issuedAtMs = new Date(user.reset_expires).getTime() - 60 * 60 * 1000;
+    const secondsSinceIssued = (Date.now() - issuedAtMs) / 1000;
+    if (secondsSinceIssued < 30) {
+      return res.status(429).json({
+        success: false,
+        error: `Please wait ${Math.ceil(30 - secondsSinceIssued)}s before requesting another reset email.`,
+        retryAfterSeconds: Math.ceil(30 - secondsSinceIssued),
+      });
+    }
+  }
+
   // Generate secure token (32 bytes hex)
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour expiration
@@ -197,7 +212,7 @@ function resetPasswordWithToken(req, res) {
   }
 
   const user = db.prepare(`
-    SELECT id, reset_expires FROM users WHERE reset_token = ?
+    SELECT id, username, reset_expires FROM users WHERE reset_token = ?
   `).get(token);
 
   if (!user) {
