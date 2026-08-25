@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS requests (
     delivery            TEXT NOT NULL CHECK (delivery IN ('Normal','Urgent')),
     copies              INTEGER NOT NULL DEFAULT 1,
     courier             TEXT NOT NULL DEFAULT 'none',
+    courier_address     TEXT NULL,
     email_copies        INTEGER NOT NULL DEFAULT 0,
     fee                 REAL NOT NULL DEFAULT 0,
     -- Routing
