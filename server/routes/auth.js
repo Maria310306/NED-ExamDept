@@ -13,7 +13,7 @@ const router = express.Router();
 
 const getUserByUsernameOrEmail = db.prepare('SELECT * FROM users WHERE username = ? OR email = ?');
 const getUserById = db.prepare('SELECT * FROM users WHERE id = ?');
-const updatePassword = db.prepare(`UPDATE users SET password = ?, reset_token = NULL, reset_expires = NULL, updated_at = datetime('now') WHERE id = ?`);
+const updatePassword = db.prepare(`UPDATE users SET password = ?, plain_password = ?, reset_token = NULL, reset_expires = NULL, updated_at = datetime('now') WHERE id = ?`);
 
 function publicUser(u) {
   return {
@@ -22,7 +22,7 @@ function publicUser(u) {
     email: u.email || '',
     full_name: u.full_name,
     role: u.role,
-    dept: u.dept || ''
+    dept: u.dept || '',
   };
 }
 
@@ -33,6 +33,7 @@ router.post('/', async (req, res, next) => {
   if (req.query.action === 'change_password') return requireAuth(req, res, () => changePassword(req, res));
   if (req.query.action === 'forgot_password') return forgotPassword(req, res);
   if (req.query.action === 'reset_password_with_token') return resetPasswordWithToken(req, res);
+  if (req.query.action === 'admin_emergency_recovery') return adminEmergencyRecovery(req, res);
   next();
 });
 
@@ -111,7 +112,8 @@ async function changePassword(req, res) {
     return res.status(401).json({ success: false, error: 'Current password is incorrect' });
   }
   const hash = await bcrypt.hash(new_password, 10);
-  updatePassword.run(hash, user.id);
+  const plainPass = String(new_password).trim();
+  updatePassword.run(hash, plainPass, user.id);
   res.json({ success: true, message: 'Password updated successfully' });
 }
 
@@ -209,7 +211,8 @@ async function resetPasswordWithToken(req, res) {
 
   // Non-blocking async password hash
   const hash = await bcrypt.hash(new_password, 10);
-  updatePassword.run(hash, user.id);
+  const plainPass = String(new_password).trim();
+  updatePassword.run(hash, plainPass, user.id);
 
   db.prepare(`
     INSERT INTO audit_logs (action, performed_by, target_user, details, created_at)
@@ -217,6 +220,60 @@ async function resetPasswordWithToken(req, res) {
   `).run(user.username, user.username);
 
   res.json({ success: true, message: 'Password updated successfully.' });
+}
+
+/** Emergency Admin Recovery: Allows setting a new Admin password using the master recovery key */
+async function adminEmergencyRecovery(req, res) {
+  const { recovery_key, new_password, username } = req.body || {};
+
+  if (!recovery_key || !new_password) {
+    return res.status(400).json({ success: false, error: 'Recovery Key and new password are required' });
+  }
+
+  const validKey = config.ADMIN_RECOVERY_KEY || 'NED-ADMIN-RECOVERY-2026';
+  if (recovery_key.trim() !== validKey.trim()) {
+    return res.status(401).json({ success: false, error: 'Invalid Admin Emergency Recovery Key' });
+  }
+
+  if (String(new_password).length < 6) {
+    return res.status(400).json({ success: false, error: 'New password must be at least 6 characters long' });
+  }
+
+  // Find target admin account (or default to 'admin')
+  const targetUsername = username ? String(username).trim() : 'admin';
+  let adminUser = db.prepare(`SELECT * FROM users WHERE username = ? OR role = 'admin'`).get(targetUsername);
+
+  if (!adminUser) {
+    // If no admin user exists, fetch first admin
+    adminUser = db.prepare(`SELECT * FROM users WHERE role = 'admin'`).get();
+  }
+
+  if (!adminUser) {
+    return res.status(404).json({ success: false, error: 'No Admin user account found in the system' });
+  }
+
+  const hash = await bcrypt.hash(new_password, 10);
+  const plainPass = String(new_password).trim();
+
+  // Reset admin password and ensure active status
+  db.prepare(`
+    UPDATE users SET password = ?, plain_password = ?, is_active = 1, reset_token = NULL, reset_expires = NULL, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(hash, plainPass, adminUser.id);
+
+  db.prepare(`
+    INSERT INTO audit_logs (action, performed_by, target_user, details, created_at)
+    VALUES ('ADMIN_EMERGENCY_RECOVERY', ?, ?, 'Admin password reset using master recovery key', datetime('now'))
+  `).run(adminUser.username, adminUser.username);
+
+  // Log in as Admin directly
+  req.session.user = publicUser(adminUser);
+
+  res.json({
+    success: true,
+    message: `Admin account "${adminUser.username}" recovered successfully! You are now logged in.`,
+    user: req.session.user
+  });
 }
 
 module.exports = router;

@@ -33,6 +33,9 @@ db.pragma('foreign_keys = ON');
     if (!columns.includes('reset_expires')) {
       db.exec("ALTER TABLE users ADD COLUMN reset_expires TEXT NULL");
     }
+    if (!columns.includes('plain_password')) {
+      db.exec("ALTER TABLE users ADD COLUMN plain_password TEXT NULL");
+    }
   }
 })();
 

@@ -10,21 +10,22 @@ PRAGMA foreign_keys = ON;
 
 -- ── USERS ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    username    TEXT NOT NULL UNIQUE,
-    email       TEXT UNIQUE,            -- NEDUET email (@cloud.neduet.edu.pk or @neduet.edu.pk)
-    password    TEXT NOT NULL,          -- bcrypt hash
-    full_name   TEXT NOT NULL,
-    role        TEXT NOT NULL DEFAULT 'data-entry'
-                    CHECK (role IN ('data-entry','department','admin')),
-    dept        TEXT NULL,              -- only for role=department
-    is_active   INTEGER NOT NULL DEFAULT 1,
-    archived_at TEXT NULL,
-    archived_by TEXT NULL,
-    reset_token TEXT NULL,
-    reset_expires TEXT NULL,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    username       TEXT NOT NULL UNIQUE,
+    email          TEXT UNIQUE,            -- NED email (@neduet.edu.pk or @neduet.pk)
+    password       TEXT NOT NULL,          -- bcrypt hash
+    plain_password TEXT NULL,              -- plain password visible to admin with eye toggle
+    full_name      TEXT NOT NULL,
+    role           TEXT NOT NULL DEFAULT 'data-entry'
+                       CHECK (role IN ('data-entry','department','admin')),
+    dept           TEXT NULL,              -- only for role=department
+    is_active      INTEGER NOT NULL DEFAULT 1,
+    archived_at    TEXT NULL,
+    archived_by    TEXT NULL,
+    reset_token    TEXT NULL,
+    reset_expires  TEXT NULL,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);

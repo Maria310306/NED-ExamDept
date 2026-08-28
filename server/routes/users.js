@@ -12,7 +12,8 @@ const VALID_ROLES = ['data-entry', 'department', 'admin'];
 
 function isValidNeduetEmail(email) {
   if (!email || typeof email !== 'string') return false;
-  return /^[a-zA-Z0-9._%+-]+@cloud\.neduet\.edu\.pk$/i.test(email.trim());
+  // Validates @neduet.edu.pk or @neduet.pk
+  return /^[a-zA-Z0-9._%+-]+@neduet(\.edu)?\.pk$/i.test(email.trim());
 }
 
 function publicUser(u) {
@@ -23,6 +24,7 @@ function publicUser(u) {
     full_name: u.full_name,
     role: u.role,
     dept: u.dept || '',
+    plain_password: u.plain_password || '••••••••',
     is_active: !!u.is_active,
     archived_at: u.archived_at || null,
     archived_by: u.archived_by || null,
@@ -58,7 +60,7 @@ router.post('/', async (req, res, next) => {
   }
 
   if (!isValidNeduetEmail(email)) {
-    return res.status(400).json({ success: false, error: 'Invalid NED email address. Email must end with @cloud.neduet.edu.pk' });
+    return res.status(400).json({ success: false, error: 'Invalid NED email address. Email must end with @neduet.edu.pk or @neduet.pk' });
   }
 
   if (!VALID_ROLES.includes(role)) {
@@ -81,13 +83,16 @@ router.post('/', async (req, res, next) => {
 
   // Non-blocking async password hash
   const hash = await bcrypt.hash(password, 10);
+  const plainPass = String(password).trim();
+
   const info = db.prepare(`
-    INSERT INTO users (username, email, password, full_name, role, dept, is_active, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+    INSERT INTO users (username, email, password, plain_password, full_name, role, dept, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
   `).run(
     String(username).trim(),
     String(email).trim(),
     hash,
+    plainPass,
     String(full_name).trim(),
     role,
     role === 'department' ? dept : null
@@ -114,7 +119,7 @@ router.post('/', (req, res, next) => {
 
   if (email && email !== user.email) {
     if (!isValidNeduetEmail(email)) {
-      return res.status(400).json({ success: false, error: 'Invalid NEDUET email address' });
+      return res.status(400).json({ success: false, error: 'Invalid NED email address (@neduet.edu.pk or @neduet.pk)' });
     }
     const existing = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email, id);
     if (existing) {
@@ -170,7 +175,8 @@ router.post('/', async (req, res, next) => {
   if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 
   const hash = await bcrypt.hash(new_password, 10);
-  db.prepare(`UPDATE users SET password = ?, updated_at = datetime('now') WHERE id = ?`).run(hash, id);
+  const plainPass = String(new_password).trim();
+  db.prepare(`UPDATE users SET password = ?, plain_password = ?, updated_at = datetime('now') WHERE id = ?`).run(hash, plainPass, id);
 
   db.prepare(`
     INSERT INTO audit_logs (action, performed_by, target_user, details, created_at)

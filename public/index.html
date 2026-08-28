@@ -57,12 +57,13 @@
         </div>
         <div class="field-group">
           <label class="field-label">Username or NEDUET Email</label>
-          <input class="field-input" type="text" id="login-user" placeholder="username or user@cloud.neduet.edu.pk" autocomplete="off" />
+          <input class="field-input" type="text" id="login-user" placeholder="username or user@neduet.pk" autocomplete="off" />
         </div>
         <div class="field-group">
           <label class="field-label">Password</label>
           <input class="field-input" type="password" id="login-pass" placeholder="••••••••" />
-          <div style="text-align:right;margin-top:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+            <a href="#" onclick="openAdminRecoveryModal(event)" style="color:var(--muted,#7a7a9d);font-size:12.5px;text-decoration:none;font-weight:500;">Admin locked out?</a>
             <a href="#" onclick="openForgotPasswordModal(event)" style="color:var(--gold,#f5a623);font-size:13px;text-decoration:none;font-weight:500;">Forgot Password?</a>
           </div>
         </div>
@@ -926,7 +927,7 @@
         <div class="page-header">
           <div>
             <h2 class="page-title">Database Backups</h2>
-            <p class="page-sub">Automated daily database backups and point-in-time recovery logs</p>
+            <p class="page-sub">Automated daily database backups — all backups are kept permanently for point-in-time recovery</p>
           </div>
           <button class="btn-primary sm" onclick="triggerManualBackup()">
             <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor;margin-right:6px;"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
@@ -980,8 +981,8 @@
           </div>
           <div class="field-group" style="margin-bottom:14px">
             <label class="field-label">NEDUET Email <span class="req-star">*</span></label>
-            <input class="field-input" id="new-user-email" type="email" placeholder="mali22@cloud.neduet.edu.pk" required />
-            <div class="field-hint">Must end with @cloud.neduet.edu.pk or @neduet.edu.pk</div>
+            <input class="field-input" id="new-user-email" type="email" placeholder="mali22@neduet.pk" required />
+            <div class="field-hint">Must end with @neduet.pk or @neduet.edu.pk</div>
           </div>
           <div class="field-group" style="margin-bottom:14px">
             <label class="field-label">Password <span class="req-star">*</span></label>
@@ -1055,7 +1056,7 @@
       </div>
       <div class="modal-body">
         <p style="font-size:12.5px;color:var(--muted,#6b7280);margin:0 0 16px 0;line-height:1.5;">
-          Passwords are stored as one-way encrypted hashes and can never be viewed or recovered — only reset to a new value.
+          Set a new password for this user. The updated password will be visible in the user list with the eye icon.
         </p>
         <form onsubmit="submitSetUserPassword(event)">
           <input type="hidden" id="set-user-password-user-id" />
@@ -1086,7 +1087,7 @@
         <form onsubmit="submitForgotPassword(event)">
           <div class="field-group" style="margin-bottom:20px;">
             <label class="field-label">Registered Email / Username <span class="req-star">*</span></label>
-            <input class="field-input" type="text" id="forgot-email-input" placeholder="user@cloud.neduet.edu.pk" required />
+            <input class="field-input" type="text" id="forgot-email-input" placeholder="username or user@neduet.pk" required />
           </div>
           <div style="display:flex;gap:10px;justify-content:flex-end">
             <button type="button" class="btn-secondary" onclick="closeForgotPasswordModal()">Cancel</button>
@@ -1123,6 +1124,46 @@
           <div style="display:flex;gap:10px;justify-content:flex-end">
             <button type="button" class="btn-secondary" onclick="closeEnterTokenModal()">Cancel</button>
             <button type="submit" class="btn-primary">Verify Token</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Emergency Recovery Modal -->
+  <div class="modal-overlay" id="admin-recovery-modal-overlay">
+    <div class="modal-box" style="max-width:420px">
+      <div class="modal-header">
+        <div>
+          <div class="modal-req-id">Admin Emergency Recovery</div>
+          <div class="modal-student">Reset an admin account using the master recovery key</div>
+        </div>
+        <button class="modal-close" onclick="closeAdminRecoveryModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12.5px;color:var(--muted,#6b7280);margin:0 0 16px 0;line-height:1.5;">
+          Use this only when an admin cannot log in and email reset is unavailable. Contact your system administrator for the recovery key.
+        </p>
+        <form onsubmit="submitAdminRecovery(event)">
+          <div class="field-group" style="margin-bottom:14px;">
+            <label class="field-label">Recovery Key <span class="req-star">*</span></label>
+            <input class="field-input" type="password" id="admin-recovery-key" placeholder="Enter master recovery key" required autocomplete="off" />
+          </div>
+          <div class="field-group" style="margin-bottom:14px;">
+            <label class="field-label">Admin Username</label>
+            <input class="field-input" type="text" id="admin-recovery-username" placeholder="admin (leave blank for default)" autocomplete="off" />
+          </div>
+          <div class="field-group" style="margin-bottom:14px;">
+            <label class="field-label">New Password <span class="req-star">*</span></label>
+            <input class="field-input" type="password" id="admin-recovery-new-password" placeholder="••••••••" required minlength="6" />
+          </div>
+          <div class="field-group" style="margin-bottom:20px;">
+            <label class="field-label">Confirm New Password <span class="req-star">*</span></label>
+            <input class="field-input" type="password" id="admin-recovery-confirm-password" placeholder="••••••••" required minlength="6" />
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button type="button" class="btn-secondary" onclick="closeAdminRecoveryModal()">Cancel</button>
+            <button type="submit" class="btn-primary">Recover &amp; Sign In</button>
           </div>
         </form>
       </div>

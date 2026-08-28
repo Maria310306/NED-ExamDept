@@ -15,4 +15,5 @@ module.exports = {
   EMAIL_PASS: process.env.EMAIL_PASS || null,
   EMAIL_FROM_NAME: process.env.EMAIL_FROM_NAME || 'ExamPortal — University Examination Department',
   UNIVERSITY_NAME: process.env.UNIVERSITY_NAME || 'University Examination Department',
+  ADMIN_RECOVERY_KEY: process.env.ADMIN_RECOVERY_KEY || 'NED-ADMIN-RECOVERY-2026',
 };

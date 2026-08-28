@@ -1849,6 +1849,7 @@ else initCalendar();
 const userState = {
   activeTab: 'active', // 'active' or 'archived'
   users: [],
+  visiblePasswords: new Set(),
 };
 
 function switchUserTab(tab) {
@@ -1892,6 +1893,33 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+function toggleUserPasswordVisibility(userId) {
+  if (userState.visiblePasswords.has(userId)) {
+    userState.visiblePasswords.delete(userId);
+  } else {
+    userState.visiblePasswords.add(userId);
+  }
+  renderUsersTable();
+}
+
+function renderPasswordCell(u) {
+  const visible = userState.visiblePasswords.has(u.id);
+  const pw = u.plain_password || '••••••••';
+  const display = visible ? escapeHtml(pw) : '••••••••';
+  const title = visible ? 'Hide password' : 'Show password';
+  const eyeIcon = visible
+    ? '<path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>'
+    : '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>';
+  return `
+    <div class="password-cell">
+      <code class="user-password-text">${display}</code>
+      <button type="button" class="password-eye-btn" onclick="toggleUserPasswordVisibility(${u.id})" title="${title}" aria-label="${title}">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">${eyeIcon}</svg>
+      </button>
+    </div>
+  `;
+}
+
 function renderUsersTable() {
   const query = (document.getElementById('user-search')?.value || '').toLowerCase().trim();
   const filtered = userState.users.filter(u => 
@@ -1917,6 +1945,7 @@ function renderUsersTable() {
         <th>Full Name</th>
         <th>Username</th>
         <th>NEDUET Email</th>
+        <th>Password</th>
         <th>Role</th>
         <th>Department</th>
         <th>Actions</th>
@@ -1924,7 +1953,7 @@ function renderUsersTable() {
     `;
 
     if (filtered.length === 0) {
-      bodyEl.innerHTML = `<tr><td colspan="7" class="empty-row">No active users found</td></tr>`;
+      bodyEl.innerHTML = `<tr><td colspan="8" class="empty-row">No active users found</td></tr>`;
       return;
     }
 
@@ -1934,6 +1963,7 @@ function renderUsersTable() {
         <td>${escapeHtml(u.full_name)}</td>
         <td><code>${escapeHtml(u.username)}</code></td>
         <td>${u.email ? `<a href="mailto:${escapeHtml(u.email)}" style="color:var(--accent,#0f766e);">${escapeHtml(u.email)}</a>` : '—'}</td>
+        <td>${renderPasswordCell(u)}</td>
         <td><span class="badge ${u.role === 'admin' ? 'badge-approved' : u.role === 'department' ? 'badge-received' : 'badge-pending'}">${u.role}</span></td>
         <td>${escapeHtml(u.dept || '—')}</td>
         <td>
@@ -1950,6 +1980,7 @@ function renderUsersTable() {
         <th>Full Name</th>
         <th>Username</th>
         <th>NEDUET Email</th>
+        <th>Password</th>
         <th>Role</th>
         <th>Archived Date</th>
         <th>Archived By</th>
@@ -1958,7 +1989,7 @@ function renderUsersTable() {
     `;
 
     if (filtered.length === 0) {
-      bodyEl.innerHTML = `<tr><td colspan="8" class="empty-row">No archived users found</td></tr>`;
+      bodyEl.innerHTML = `<tr><td colspan="9" class="empty-row">No archived users found</td></tr>`;
       return;
     }
 
@@ -1968,6 +1999,7 @@ function renderUsersTable() {
         <td>${escapeHtml(u.full_name)}</td>
         <td><code>${escapeHtml(u.username)}</code></td>
         <td>${u.email ? escapeHtml(u.email) : '—'}</td>
+        <td>${renderPasswordCell(u)}</td>
         <td><span class="badge badge-pending">${u.role}</span></td>
         <td>${u.archived_at ? escapeHtml(u.archived_at) : '—'}</td>
         <td>${u.archived_by ? `<code>${escapeHtml(u.archived_by)}</code>` : '—'}</td>
@@ -2018,6 +2050,11 @@ async function submitCreateUser(e) {
 
   if (!full_name || !username || !email || !password || !role) {
     showToast('Please fill all required fields', 'error');
+    return;
+  }
+
+  if (!isValidNeduetEmail(email)) {
+    showToast('Enter a valid @neduet.pk or @neduet.edu.pk email address', 'error');
     return;
   }
 
@@ -2139,6 +2176,7 @@ function submitSetUserPassword(e) {
         return;
       }
       showToast('Password updated successfully', 'success');
+      loadUsers();
     }
   );
 }
@@ -2162,16 +2200,21 @@ function closeForgotPasswordModal() {
   modal.classList.remove('active');
 }
 
-const NEDUET_EMAIL_RE = /^[a-zA-Z0-9._%+-]+@cloud\.neduet\.edu\.pk$/i;
+const NEDUET_EMAIL_RE = /^[a-zA-Z0-9._%+-]+@neduet(\.edu)?\.pk$/i;
+
+function isValidNeduetEmail(email) {
+  return NEDUET_EMAIL_RE.test(String(email || '').trim());
+}
+
 let _forgotPasswordEmail = '';
 let _resendCountdownTimer = null;
 
 async function submitForgotPassword(e) {
   e.preventDefault();
   const email = document.getElementById('forgot-email-input').value.trim();
-  if (!email) { showToast('Enter your registered NED email', 'error'); return; }
-  if (!NEDUET_EMAIL_RE.test(email)) {
-    showToast('Enter a valid @cloud.neduet.edu.pk email address', 'error');
+  if (!email) { showToast('Enter your registered NED email or username', 'error'); return; }
+  if (email.includes('@') && !isValidNeduetEmail(email)) {
+    showToast('Enter a valid @neduet.pk or @neduet.edu.pk email address', 'error');
     return;
   }
 
@@ -2337,6 +2380,78 @@ async function submitResetPassword(e) {
     }
   }
 })();
+
+/* ══════════════════════════════════════════
+   ADMIN EMERGENCY RECOVERY
+══════════════════════════════════════════ */
+
+function openAdminRecoveryModal(e) {
+  if (e) e.preventDefault();
+  document.getElementById('admin-recovery-key').value = '';
+  document.getElementById('admin-recovery-username').value = '';
+  document.getElementById('admin-recovery-new-password').value = '';
+  document.getElementById('admin-recovery-confirm-password').value = '';
+  const modal = document.getElementById('admin-recovery-modal-overlay');
+  modal.classList.add('open');
+  modal.classList.add('active');
+  setTimeout(() => document.getElementById('admin-recovery-key').focus(), 100);
+}
+
+function closeAdminRecoveryModal() {
+  const modal = document.getElementById('admin-recovery-modal-overlay');
+  modal.classList.remove('open');
+  modal.classList.remove('active');
+}
+
+async function submitAdminRecovery(e) {
+  e.preventDefault();
+  const recovery_key = document.getElementById('admin-recovery-key').value.trim();
+  const username = document.getElementById('admin-recovery-username').value.trim();
+  const new_password = document.getElementById('admin-recovery-new-password').value.trim();
+  const confirm_pass = document.getElementById('admin-recovery-confirm-password').value.trim();
+
+  if (!recovery_key || !new_password) {
+    showToast('Recovery key and new password are required', 'error');
+    return;
+  }
+  if (new_password.length < 6) {
+    showToast('Password must be at least 6 characters long', 'error');
+    return;
+  }
+  if (new_password !== confirm_pass) {
+    showToast('Passwords do not match', 'error');
+    return;
+  }
+
+  const body = { recovery_key, new_password };
+  if (username) body.username = username;
+
+  const res = await API.post('auth.php?action=admin_emergency_recovery', body);
+  if (!res.success) {
+    showToast(res.error || 'Recovery failed', 'error');
+    return;
+  }
+
+  closeAdminRecoveryModal();
+  showToast(res.message || 'Admin account recovered successfully', 'success');
+
+  const u = res.user;
+  state.user = u.username;
+  state.role = u.role;
+  state.dept = u.dept || '';
+
+  document.getElementById('user-avatar').textContent    = u.username[0].toUpperCase();
+  document.getElementById('user-name-disp').textContent = u.full_name || u.username;
+  document.getElementById('user-role-disp').textContent =
+    u.role === 'data-entry' ? 'Counter' :
+    u.role === 'department' ? (u.dept || 'Section') : 'Super Admin';
+
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display          = 'block';
+  setupNavigation();
+  initEntryForm();
+  updatePreviewStats();
+}
 
 /* ══════════════════════════════════════════
    DATABASE BACKUP MANAGEMENT

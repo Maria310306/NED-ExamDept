@@ -2448,4 +2448,38 @@ table code {
   font-family: monospace;
   font-size: 0.85em;
   border: 1px solid var(--border, #e5e7eb);
+}
+
+/* Admin password visibility toggle */
+.password-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.password-cell .user-password-text {
+  min-width: 72px;
+  letter-spacing: 0.02em;
+}
+
+.password-eye-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface, #f3f4f6);
+  color: var(--muted, #7a7a9d);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.14s, border-color 0.14s, background 0.14s;
+}
+
+.password-eye-btn:hover {
+  color: var(--mid, #0f3460);
+  border-color: var(--mid, #0f3460);
+  background: var(--white, #fff);
 }
